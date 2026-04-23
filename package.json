@@ -4,18 +4,25 @@
   "description": "Self-hosted MCP server for the Gong REST API",
   "main": "dist/index.js",
   "bin": {
-    "gong-mcp": "dist/index.js"
+    "gong-mcp": "dist/index.js",
+    "gong-mcp-setup": "dist/setup.js"
   },
   "scripts": {
     "build": "tsc",
     "dev": "tsx src/index.ts",
-    "start": "node dist/index.js"
+    "start": "node dist/index.js",
+    "setup": "tsx src/setup.ts"
   },
-  "keywords": ["mcp", "gong", "ai"],
+  "keywords": [
+    "mcp",
+    "gong",
+    "ai"
+  ],
   "author": "GoNimbly",
   "license": "MIT",
   "type": "module",
   "dependencies": {
+    "@clack/prompts": "^1.2.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "zod": "^4.3.6"
   },
