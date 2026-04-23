@@ -124,11 +124,53 @@ export class GongClient {
 
   // ── Entities (AI) ────────────────────────────────────────────────────────
 
-  askEntity(params: { entityType: string; entityId: string; question: string }) {
-    return this.request(`/v2/entities/ask-entity${this.qs(params)}`);
+  askAccount(params: {
+    workspaceId: string;
+    crmAccountId: string;
+    fromDateTime: string;
+    toDateTime: string;
+    question: string;
+  }) {
+    return this.request(
+      `/v2/entities/ask-entity${this.qs({
+        workspaceId: params.workspaceId,
+        entityType: "Account",
+        crmEntityId: params.crmAccountId,
+        fromDateTime: params.fromDateTime,
+        toDateTime: params.toDateTime,
+        question: params.question,
+      })}`
+    );
   }
 
-  getEntityBrief(params: { entityType: string; entityId: string }) {
+  askDeal(params: {
+    workspaceId: string;
+    crmDealId: string;
+    fromDateTime: string;
+    toDateTime: string;
+    question: string;
+  }) {
+    return this.request(
+      `/v2/entities/ask-entity${this.qs({
+        workspaceId: params.workspaceId,
+        entityType: "Opportunity",
+        crmEntityId: params.crmDealId,
+        fromDateTime: params.fromDateTime,
+        toDateTime: params.toDateTime,
+        question: params.question,
+      })}`
+    );
+  }
+
+  generateBrief(params: {
+    workspaceId: string;
+    briefName: string;
+    entityType: "ACCOUNT" | "DEAL" | "CONTACT";
+    crmEntityId: string;
+    periodType: string;
+    fromDateTime: string;
+    toDateTime: string;
+  }) {
     return this.request(`/v2/entities/get-brief${this.qs(params)}`);
   }
 
