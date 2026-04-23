@@ -1,13 +1,21 @@
 #!/usr/bin/env node
-import { intro, outro, text, select, spinner, log, isCancel, cancel } from "@clack/prompts";
+import { intro, outro, text, select, multiselect, spinner, log, isCancel, cancel } from "@clack/prompts";
 import { fileURLToPath } from "url";
+import { readFileSync, writeFileSync, mkdirSync } from "fs";
 import path from "path";
+import os from "os";
 import { execFileNoThrow } from "./utils/execFileNoThrow.js";
 
 const SERVER_PATH = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   "../dist/index.js"
 );
+
+const CLAUDE_DESKTOP_CONFIG_PATHS: Record<string, string> = {
+  darwin: path.join(os.homedir(), "Library", "Application Support", "Claude", "claude_desktop_config.json"),
+  win32: path.join(os.homedir(), "AppData", "Roaming", "Claude", "claude_desktop_config.json"),
+  linux: path.join(os.homedir(), ".config", "Claude", "claude_desktop_config.json"),
+};
 
 async function validateCredentials(accessKey: string, secret: string): Promise<boolean> {
   const credentials = Buffer.from(`${accessKey}:${secret}`).toString("base64");
@@ -20,6 +28,33 @@ async function validateCredentials(accessKey: string, secret: string): Promise<b
     return false;
   }
 }
+
+function installToClaudeDesktop(accessKey: string, accessSecret: string): void {
+  const configPath = CLAUDE_DESKTOP_CONFIG_PATHS[process.platform] ?? CLAUDE_DESKTOP_CONFIG_PATHS.linux;
+
+  let config: Record<string, unknown> = {};
+  try {
+    config = JSON.parse(readFileSync(configPath, "utf-8"));
+  } catch {
+    // Config doesn't exist yet — create it fresh
+    mkdirSync(path.dirname(configPath), { recursive: true });
+  }
+
+  const mcpServers = (config.mcpServers as Record<string, unknown>) ?? {};
+  mcpServers.gong = {
+    command: "node",
+    args: [SERVER_PATH],
+    env: {
+      GONG_ACCESS_KEY: accessKey,
+      GONG_ACCESS_KEY_SECRET: accessSecret,
+    },
+  };
+  config.mcpServers = mcpServers;
+
+  writeFileSync(configPath, JSON.stringify(config, null, 2));
+}
+
+// ── Prompts ───────────────────────────────────────────────────────────────────
 
 intro("  Gong MCP — Setup  ");
 
@@ -47,36 +82,70 @@ if (!valid) {
 }
 s.stop("Credentials validated.");
 
-const scope = await select({
-  message: "Where should this MCP be available?",
+const targets = await multiselect({
+  message: "Where should this MCP be installed?",
   options: [
-    { value: "user", label: "All my Claude projects", hint: "stored in user settings" },
-    { value: "project", label: "This project only", hint: "stored in .mcp.json" },
+    { value: "desktop", label: "Claude Desktop", hint: "Connectors tab — requires app restart" },
+    { value: "code", label: "Claude Code", hint: "CLI and IDE extension" },
   ],
+  initialValues: ["desktop", "code"],
 });
-if (isCancel(scope)) { cancel("Setup cancelled."); process.exit(0); }
+if (isCancel(targets)) { cancel("Setup cancelled."); process.exit(0); }
 
-s.start("Registering with Claude…");
-const result = await execFileNoThrow("claude", [
-  "mcp", "add", "gong",
-  "node", SERVER_PATH,
-  "-e", `GONG_ACCESS_KEY=${String(accessKey)}`,
-  "-e", `GONG_ACCESS_KEY_SECRET=${String(accessSecret)}`,
-  "--scope", String(scope),
-]);
+const selectedTargets = targets as string[];
+const errors: string[] = [];
 
-if (result.status === "error") {
-  s.stop("Registration failed.");
-  log.error(`'claude mcp add' failed: ${result.stderr}`);
-  log.info("Run this manually instead:");
-  log.message(
-    `claude mcp add gong node "${SERVER_PATH}" \\\n` +
-    `  -e GONG_ACCESS_KEY=<your_key> \\\n` +
-    `  -e GONG_ACCESS_KEY_SECRET=<your_secret> \\\n` +
-    `  --scope ${String(scope)}`
-  );
+// ── Claude Desktop ─────────────────────────────────────────────────────────
+
+if (selectedTargets.includes("desktop")) {
+  s.start("Installing to Claude Desktop…");
+  try {
+    installToClaudeDesktop(String(accessKey), String(accessSecret));
+    s.stop("Claude Desktop configured.");
+  } catch (err) {
+    s.stop("Claude Desktop install failed.");
+    errors.push(`Desktop: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
+// ── Claude Code ────────────────────────────────────────────────────────────
+
+if (selectedTargets.includes("code")) {
+  s.start("Installing to Claude Code…");
+  const result = await execFileNoThrow("claude", [
+    "mcp", "add", "gong",
+    "node", SERVER_PATH,
+    "-e", `GONG_ACCESS_KEY=${String(accessKey)}`,
+    "-e", `GONG_ACCESS_KEY_SECRET=${String(accessSecret)}`,
+    "--scope", "user",
+  ]);
+
+  if (result.status === "error") {
+    s.stop("Claude Code install failed.");
+    errors.push(`Code: ${result.stderr || "unknown error"}`);
+  } else {
+    s.stop("Claude Code configured.");
+  }
+}
+
+// ── Result ─────────────────────────────────────────────────────────────────
+
+if (errors.length > 0) {
+  errors.forEach((e) => log.error(e));
+}
+
+const installed = selectedTargets.filter(
+  (t) => !errors.some((e) => e.startsWith(t === "desktop" ? "Desktop" : "Code"))
+);
+
+if (installed.length === 0) {
+  log.error("Installation failed. Add the MCP manually — see the README for config details.");
   process.exit(1);
 }
 
-s.stop("Registered.");
-outro("Done! Restart Claude to pick up the Gong MCP tools.");
+const restartNeeded = installed.includes("desktop");
+outro(
+  restartNeeded
+    ? "Done! Restart Claude Desktop to see Gong in the Connectors tab."
+    : "Done! Restart Claude to pick up the Gong MCP tools."
+);
