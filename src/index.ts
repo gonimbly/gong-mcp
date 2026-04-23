@@ -2,6 +2,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { GongClient } from "./gong/client.js";
+import { registerConfigureTool } from "./tools/configure.js";
 import { registerCallTools } from "./tools/calls.js";
 import { registerUserTools } from "./tools/users.js";
 import { registerStatsTools } from "./tools/stats.js";
@@ -15,17 +16,13 @@ import { registerPermissionTools } from "./tools/permissions.js";
 import { registerDataPrivacyTools } from "./tools/dataprivacy.js";
 import { registerLogTools } from "./tools/logs.js";
 
-const ACCESS_KEY = process.env.GONG_ACCESS_KEY;
-const ACCESS_KEY_SECRET = process.env.GONG_ACCESS_KEY_SECRET;
-
-if (!ACCESS_KEY || !ACCESS_KEY_SECRET) {
-  console.error("Missing required env vars: GONG_ACCESS_KEY and GONG_ACCESS_KEY_SECRET");
-  process.exit(1);
-}
-
-const client = new GongClient({ accessKey: ACCESS_KEY, accessKeySecret: ACCESS_KEY_SECRET });
+const client = new GongClient();
 const server = new McpServer({ name: "gong-mcp", version: "0.2.0" });
 
+// Always available — no credentials needed to call these
+registerConfigureTool(server);
+
+// All Gong tools — each will surface a clear error if credentials aren't set yet
 registerCallTools(server, client);
 registerUserTools(server, client);
 registerStatsTools(server, client);

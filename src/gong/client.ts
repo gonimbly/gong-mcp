@@ -1,19 +1,21 @@
-export interface GongConfig {
-  accessKey: string;
-  accessKeySecret: string;
-  baseUrl?: string;
-}
+import { loadCredentials } from "./credentials.js";
 
 export class GongClient {
   private readonly baseUrl: string;
-  private readonly authHeader: string;
 
-  constructor(config: GongConfig) {
-    this.baseUrl = config.baseUrl ?? "https://api.gong.io";
-    const credentials = Buffer.from(
-      `${config.accessKey}:${config.accessKeySecret}`
-    ).toString("base64");
-    this.authHeader = `Basic ${credentials}`;
+  constructor(baseUrl?: string) {
+    this.baseUrl = baseUrl ?? "https://api.gong.io";
+  }
+
+  private getAuthHeader(): string {
+    const creds = loadCredentials();
+    if (!creds) {
+      throw new Error(
+        "Gong credentials not configured. Ask Claude to run the gong_setup tool with your Access Key and Secret."
+      );
+    }
+    const encoded = Buffer.from(`${creds.accessKey}:${creds.accessKeySecret}`).toString("base64");
+    return `Basic ${encoded}`;
   }
 
   private async request<T>(path: string, options: RequestInit = {}): Promise<T> {
@@ -21,7 +23,7 @@ export class GongClient {
     const response = await fetch(url, {
       ...options,
       headers: {
-        Authorization: this.authHeader,
+        Authorization: this.getAuthHeader(),
         "Content-Type": "application/json",
         ...options.headers,
       },

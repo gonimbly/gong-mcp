@@ -44,10 +44,6 @@ function installToClaudeDesktop(accessKey: string, accessSecret: string): void {
   mcpServers.gong = {
     command: "node",
     args: [SERVER_PATH],
-    env: {
-      GONG_ACCESS_KEY: accessKey,
-      GONG_ACCESS_KEY_SECRET: accessSecret,
-    },
   };
   config.mcpServers = mcpServers;
 
