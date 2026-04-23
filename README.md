@@ -33,7 +33,7 @@ To get your credentials: **Gong → Settings → API → Access Keys → Create*
 | **Calls** | List, get, transcripts, enriched content (topics, trackers, key points, next steps, outcomes) |
 | **Users** | List, get, settings history, filter by email |
 | **Stats** | Aggregate, by period, day-by-day, scorecard stats, interaction stats |
-| **Entities** | `ask_entity` — ask Gong's AI a question about an account or deal. `get_entity_brief` — AI-generated executive summary |
+| **Entities** | `gong_ask_account`, `gong_ask_deal` — ask Gong's AI a targeted question about an account or deal. `gong_generate_brief` — structured multi-category AI summary (themes, stakeholders, risks) |
 | **Settings** | Scorecards, trackers, workspaces, coaching data |
 | **Library** | Folders and saved clips |
 | **CRM** | Entities, schema, integrations |
@@ -45,11 +45,15 @@ To get your credentials: **Gong → Settings → API → Access Keys → Create*
 
 ### Highlight tools
 
-**`gong_ask_entity`** — Ask Gong's AI a natural-language question about any account or opportunity. "What are the main objections?" "Which competitors came up?" "What's the deal risk?" Gong synthesizes the answer from every related call.
+**`gong_ask_account`** — Ask Gong's AI a targeted natural-language question about a CRM account. "What are the main objections?" "Which competitors came up?" "What are the open risks?" Gong synthesizes the answer from every related call in the time window.
 
-**`gong_get_entity_brief`** — Get an AI-generated executive brief for an account or deal. All the signal, none of the call-listening.
+**`gong_ask_deal`** — Same thing, scoped to a deal/opportunity. "What are the blockers preventing this from closing?" "What did the champion say about budget?"
+
+**`gong_generate_brief`** — Generate a comprehensive structured brief for an account, deal, or contact: themes, stakeholders, risks, recent news. Built for exec briefings, deal reviews, and handover docs.
 
 **`gong_get_extensive_calls`** — Single API call that returns calls enriched with topics, trackers, briefs, key points, outcomes, next steps, and speaker stats. The one tool to rule them all.
+
+> **Note:** The three AI tools above (`gong_ask_account`, `gong_ask_deal`, `gong_generate_brief`) require **Gen AI Beta** and **MCP Server Beta** feature flags to be enabled on your Gong org. Contact your Gong Technical Administrator to activate them.
 
 ---
 
