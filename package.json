@@ -11,12 +11,23 @@
     "build": "tsc",
     "dev": "tsx src/index.ts",
     "start": "node dist/index.js",
-    "setup": "tsx src/setup.ts"
+    "setup": "tsx src/setup.ts",
+    "postbuild": "chmod +x dist/index.js dist/setup.js",
+    "prepublishOnly": "npm run build"
+  },
+  "files": [
+    "dist/",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18"
   },
   "keywords": [
     "mcp",
     "gong",
-    "ai"
+    "ai",
+    "claude",
+    "model-context-protocol"
   ],
   "author": "GoNimbly",
   "license": "MIT",
