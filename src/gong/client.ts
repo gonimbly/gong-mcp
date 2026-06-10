@@ -1,4 +1,5 @@
-import { loadCredentials } from "./credentials.js";
+import { loadTokens, saveTokens, hasLegacyCredentials } from "./tokenStore.js";
+import { refreshAccessToken } from "./oauth.js";
 
 export class GongClient {
   private readonly baseUrl: string;
@@ -7,23 +8,33 @@ export class GongClient {
     this.baseUrl = baseUrl ?? "https://api.gong.io";
   }
 
-  private getAuthHeader(): string {
-    const creds = loadCredentials();
-    if (!creds) {
-      throw new Error(
-        "Gong credentials not configured. Ask Claude to run the gong_setup tool with your Access Key and Secret."
-      );
+  private async getAccessToken(): Promise<string> {
+    const tokens = loadTokens();
+    if (!tokens) {
+      if (hasLegacyCredentials()) {
+        throw new Error(
+          "Your Gong account is using old API key authentication. Run gong_login to upgrade to OAuth."
+        );
+      }
+      throw new Error("Not authenticated. Run gong_login to connect your Gong account.");
     }
-    const encoded = Buffer.from(`${creds.accessKey}:${creds.accessKeySecret}`).toString("base64");
-    return `Basic ${encoded}`;
+
+    if (tokens.expiresAt - Date.now() < 5 * 60 * 1000) {
+      const refreshed = await refreshAccessToken(tokens);
+      saveTokens(refreshed);
+      return refreshed.accessToken;
+    }
+
+    return tokens.accessToken;
   }
 
   private async request<T>(path: string, options: RequestInit = {}): Promise<T> {
     const url = `${this.baseUrl}${path}`;
+    const token = await this.getAccessToken();
     const response = await fetch(url, {
       ...options,
       headers: {
-        Authorization: this.getAuthHeader(),
+        Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
         ...options.headers,
       },

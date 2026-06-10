@@ -17,33 +17,24 @@ const CLAUDE_DESKTOP_CONFIG_PATHS: Record<string, string> = {
   linux: path.join(os.homedir(), ".config", "Claude", "claude_desktop_config.json"),
 };
 
-async function validateCredentials(accessKey: string, secret: string): Promise<boolean> {
-  const credentials = Buffer.from(`${accessKey}:${secret}`).toString("base64");
-  try {
-    const res = await fetch("https://api.gong.io/v2/workspaces", {
-      headers: { Authorization: `Basic ${credentials}` },
-    });
-    return res.ok;
-  } catch {
-    return false;
-  }
-}
-
-function installToClaudeDesktop(accessKey: string, accessSecret: string): void {
+function installToClaudeDesktop(clientId: string, clientSecret?: string): void {
   const configPath = CLAUDE_DESKTOP_CONFIG_PATHS[process.platform] ?? CLAUDE_DESKTOP_CONFIG_PATHS.linux;
 
   let config: Record<string, unknown> = {};
   try {
     config = JSON.parse(readFileSync(configPath, "utf-8"));
   } catch {
-    // Config doesn't exist yet — create it fresh
     mkdirSync(path.dirname(configPath), { recursive: true });
   }
 
   const mcpServers = (config.mcpServers as Record<string, unknown>) ?? {};
+  const env: Record<string, string> = { GONG_OAUTH_CLIENT_ID: clientId };
+  if (clientSecret) env.GONG_OAUTH_CLIENT_SECRET = clientSecret;
+
   mcpServers.gong = {
     command: "node",
     args: [SERVER_PATH],
+    env,
   };
   config.mcpServers = mcpServers;
 
@@ -54,29 +45,21 @@ function installToClaudeDesktop(accessKey: string, accessSecret: string): void {
 
 intro("  Gong MCP — Setup  ");
 
-const accessKey = await text({
-  message: "Gong Access Key",
-  placeholder: "paste your access key",
+log.info("You need a Gong OAuth app to proceed. Create one at: Gong → Settings → API → OAuth Apps");
+
+const clientId = await text({
+  message: "OAuth Client ID",
+  placeholder: "paste your OAuth client ID",
   validate: (v) => (!v || v.trim().length === 0 ? "Required" : undefined),
 });
-if (isCancel(accessKey)) { cancel("Setup cancelled."); process.exit(0); }
+if (isCancel(clientId)) { cancel("Setup cancelled."); process.exit(0); }
 
-const accessSecret = await text({
-  message: "Gong Access Key Secret",
-  placeholder: "paste your access key secret",
-  validate: (v) => (!v || v.trim().length === 0 ? "Required" : undefined),
+const clientSecretInput = await text({
+  message: "OAuth Client Secret (optional — leave blank for PKCE-only public clients)",
+  placeholder: "leave blank if not required",
 });
-if (isCancel(accessSecret)) { cancel("Setup cancelled."); process.exit(0); }
-
-const s = spinner();
-s.start("Validating credentials against Gong API…");
-const valid = await validateCredentials(String(accessKey), String(accessSecret));
-if (!valid) {
-  s.stop("Validation failed.");
-  log.error("Could not authenticate. Check your Access Key and Secret in Gong → Settings → API.");
-  process.exit(1);
-}
-s.stop("Credentials validated.");
+if (isCancel(clientSecretInput)) { cancel("Setup cancelled."); process.exit(0); }
+const clientSecret = String(clientSecretInput).trim() || undefined;
 
 const targets = await multiselect({
   message: "Where should this MCP be installed?",
@@ -90,13 +73,14 @@ if (isCancel(targets)) { cancel("Setup cancelled."); process.exit(0); }
 
 const selectedTargets = targets as string[];
 const errors: string[] = [];
+const s = spinner();
 
 // ── Claude Desktop ─────────────────────────────────────────────────────────
 
 if (selectedTargets.includes("desktop")) {
   s.start("Installing to Claude Desktop…");
   try {
-    installToClaudeDesktop(String(accessKey), String(accessSecret));
+    installToClaudeDesktop(String(clientId), clientSecret);
     s.stop("Claude Desktop configured.");
   } catch (err) {
     s.stop("Claude Desktop install failed.");
@@ -108,11 +92,15 @@ if (selectedTargets.includes("desktop")) {
 
 if (selectedTargets.includes("code")) {
   s.start("Installing to Claude Code…");
+  const envArgs: string[] = [
+    "-e", `GONG_OAUTH_CLIENT_ID=${String(clientId)}`,
+  ];
+  if (clientSecret) envArgs.push("-e", `GONG_OAUTH_CLIENT_SECRET=${clientSecret}`);
+
   const result = await execFileNoThrow("claude", [
     "mcp", "add", "gong",
     "node", SERVER_PATH,
-    "-e", `GONG_ACCESS_KEY=${String(accessKey)}`,
-    "-e", `GONG_ACCESS_KEY_SECRET=${String(accessSecret)}`,
+    ...envArgs,
     "--scope", "user",
   ]);
 
@@ -142,6 +130,6 @@ if (installed.length === 0) {
 const restartNeeded = installed.includes("desktop");
 outro(
   restartNeeded
-    ? "Done! Restart Claude Desktop to see Gong in the Connectors tab."
-    : "Done! Restart Claude to pick up the Gong MCP tools."
+    ? "Done! Restart Claude Desktop, then say \"Login to Gong\" to complete OAuth authentication."
+    : "Done! Open Claude and say \"Login to Gong\" to complete OAuth authentication."
 );

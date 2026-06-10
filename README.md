@@ -17,7 +17,7 @@ gong-mcp-setup
 
 The setup wizard registers the MCP with Claude Desktop and/or Claude Code. Both are selected by default.
 
-**No credentials needed during install.** The first time you use Gong tools, Claude will prompt you to run `gong_setup` directly in the chat.
+**Before running setup**, create an OAuth app in Gong: **Settings → API → OAuth Apps → Create**. You'll need the Client ID (and optionally Client Secret) during setup.
 
 ---
 
@@ -25,17 +25,19 @@ The setup wizard registers the MCP with Claude Desktop and/or Claude Code. Both 
 
 Once installed, open Claude and say:
 
-> *"Set up Gong with my access key [key] and secret [secret]"*
+> *"Login to Gong"*
 
-Claude calls the `gong_setup` tool, validates your credentials against the Gong API, and saves them locally. All tools are available immediately — no restart needed.
-
-To get your credentials: **Gong → Settings → API → Access Keys → Create** (requires Technical Administrator role).
+Claude calls the `gong_login` tool, which opens a browser window. Sign in with your Gong account — access is scoped to your user permissions, not the full org. Tokens are saved locally and auto-refreshed.
 
 To check your connection at any time:
 
 > *"Check my Gong connection"* → runs `gong_whoami`
 
-Credentials are stored in `~/.gong-mcp/credentials.json` (owner read/write only). You can also pass them as env vars (`GONG_ACCESS_KEY` / `GONG_ACCESS_KEY_SECRET`) if you prefer.
+To disconnect:
+
+> *"Logout of Gong"* → runs `gong_logout`
+
+OAuth tokens are stored in `~/.gong-mcp/tokens.json` (owner read/write only). The OAuth client ID and secret are passed as env vars (`GONG_OAUTH_CLIENT_ID` / `GONG_OAUTH_CLIENT_SECRET`) by the setup wizard.
 
 ---
 
@@ -45,7 +47,7 @@ Credentials are stored in `~/.gong-mcp/credentials.json` (owner read/write only)
 
 | Module | What you get |
 |---|---|
-| **Setup** | `gong_setup` — connect your account from within Claude. `gong_whoami` — check connection status |
+| **Setup** | `gong_login` — connect via OAuth browser flow. `gong_logout` — disconnect. `gong_whoami` — check connection status |
 | **Calls** | List, get, transcripts, enriched content (topics, trackers, key points, next steps, outcomes) |
 | **Users** | List, get, settings history, filter by email |
 | **Stats** | Aggregate, by period, day-by-day, scorecard stats, interaction stats |
@@ -77,7 +79,7 @@ Credentials are stored in `~/.gong-mcp/credentials.json` (owner read/write only)
 
 Once connected, you can ask Claude things like:
 
-- *"Set up Gong"* — connects your account
+- *"Login to Gong"* — opens browser OAuth flow to connect your account
 - *"Summarize all calls with Acme Corp this month"*
 - *"What are the top objections reps are hearing this quarter?"*
 - *"Which deals have gone quiet in the last 30 days?"*

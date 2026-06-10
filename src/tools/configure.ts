@@ -1,45 +1,60 @@
-import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { saveCredentials, loadCredentials } from "../gong/credentials.js";
+import { startOAuthFlow } from "../gong/oauth.js";
+import { loadTokens, clearTokens, hasLegacyCredentials } from "../gong/tokenStore.js";
 
 export function registerConfigureTool(server: McpServer) {
   server.tool(
-    "gong_setup",
-    "Configure Gong API credentials. Run this first if Gong tools return an authentication error. Get your Access Key and Secret from Gong → Settings → API → Access Keys (requires Technical Administrator role).",
-    {
-      accessKey: z.string().describe("Gong API Access Key"),
-      accessKeySecret: z.string().describe("Gong API Access Key Secret"),
-    },
-    async (args) => {
-      // Validate before saving
-      const encoded = Buffer.from(`${args.accessKey}:${args.accessKeySecret}`).toString("base64");
+    "gong_login",
+    "Connect your Gong account via OAuth. Opens a browser window for you to sign in. Run this first before using any other Gong tools.",
+    {},
+    async () => {
       try {
+        await startOAuthFlow();
+      } catch (err) {
+        return {
+          content: [{
+            type: "text" as const,
+            text: `Login failed: ${err instanceof Error ? err.message : String(err)}`,
+          }],
+        };
+      }
+
+      try {
+        const tokens = loadTokens()!;
         const res = await fetch("https://api.gong.io/v2/workspaces", {
-          headers: { Authorization: `Basic ${encoded}` },
+          headers: { Authorization: `Bearer ${tokens.accessToken}` },
         });
         if (!res.ok) {
           return {
             content: [{
               type: "text" as const,
-              text: `Invalid credentials (HTTP ${res.status}). Double-check your Access Key and Secret in Gong → Settings → API.`,
+              text: `Logged in but the API returned HTTP ${res.status}. Try gong_whoami to check your connection.`,
             }],
           };
         }
-      } catch (err) {
-        return {
-          content: [{
-            type: "text" as const,
-            text: `Could not reach the Gong API: ${err instanceof Error ? err.message : String(err)}`,
-          }],
-        };
+      } catch {
+        // Non-fatal — tokens were saved, API check is best-effort
       }
-
-      saveCredentials({ accessKey: args.accessKey, accessKeySecret: args.accessKeySecret });
 
       return {
         content: [{
           type: "text" as const,
-          text: "Gong credentials saved and validated. All Gong tools are now ready to use.",
+          text: "Connected to Gong! All Gong tools are now ready to use.",
+        }],
+      };
+    }
+  );
+
+  server.tool(
+    "gong_logout",
+    "Disconnect your Gong account and clear all stored OAuth tokens.",
+    {},
+    async () => {
+      clearTokens();
+      return {
+        content: [{
+          type: "text" as const,
+          text: "Logged out of Gong. Run gong_login to reconnect.",
         }],
       };
     }
@@ -47,37 +62,50 @@ export function registerConfigureTool(server: McpServer) {
 
   server.tool(
     "gong_whoami",
-    "Check which Gong credentials are currently configured and whether they are valid.",
+    "Check the current Gong authentication status and token validity.",
     {},
     async () => {
-      const creds = loadCredentials();
-      if (!creds) {
+      if (hasLegacyCredentials() && !loadTokens()) {
         return {
           content: [{
             type: "text" as const,
-            text: "No credentials configured. Run gong_setup to connect your Gong account.",
+            text: "Your Gong account is configured with old API key authentication. Run gong_login to upgrade to OAuth.",
           }],
         };
       }
 
-      const encoded = Buffer.from(`${creds.accessKey}:${creds.accessKeySecret}`).toString("base64");
+      const tokens = loadTokens();
+      if (!tokens) {
+        return {
+          content: [{
+            type: "text" as const,
+            text: "Not connected. Run gong_login to connect your Gong account.",
+          }],
+        };
+      }
+
+      const expiresIn = tokens.expiresAt - Date.now();
+      const expiryLabel =
+        expiresIn < 0 ? "expired (will auto-refresh on next request)" :
+        expiresIn < 5 * 60 * 1000 ? "expiring soon (will auto-refresh on next request)" :
+        `expires in ${Math.round(expiresIn / 60000)} minutes`;
+
       try {
         const res = await fetch("https://api.gong.io/v2/workspaces", {
-          headers: { Authorization: `Basic ${encoded}` },
+          headers: { Authorization: `Bearer ${tokens.accessToken}` },
         });
         if (res.ok) {
-          const masked = `${creds.accessKey.slice(0, 4)}${"*".repeat(creds.accessKey.length - 4)}`;
           return {
             content: [{
               type: "text" as const,
-              text: `Connected. Access Key: ${masked}`,
+              text: `Connected to Gong. Token: ${expiryLabel}.`,
             }],
           };
         }
         return {
           content: [{
             type: "text" as const,
-            text: `Credentials found but invalid (HTTP ${res.status}). Run gong_setup to update them.`,
+            text: `Token found but API returned HTTP ${res.status}. Token: ${expiryLabel}. Try running gong_login again.`,
           }],
         };
       } catch (err) {
