@@ -46,9 +46,30 @@ size — clients should keep paginating with the returned cursor.
    (`/v2/users` lookup) and binds it to the session. A session can only be used by the
    user who created it.
 
-## Deploy on Render
+## CI/CD
 
-The repo contains `render.yaml` — create a new Blueprint service from the repo.
+`.github/workflows/ci.yml` runs build + the unit-test suite on every pull request.
+On push to `main`, after tests pass, it triggers a Render deploy via the service's
+deploy hook (`RENDER_DEPLOY_HOOK_URL` repo secret). Render's native auto-deploy is
+disabled (`autoDeploy: false` in `render.yaml`) so untested code never ships.
+
+Pipeline: `PR → CI (build + 50 tests) → merge to main → CI → Render deploy hook → live`
+
+## Deploy on Render (one-time setup)
+
+The repo contains `render.yaml` — create a new Blueprint service from the repo:
+
+1. Render dashboard → **New → Blueprint** → connect `gonimbly/gong-mcp` → Render
+   reads `render.yaml` and prompts for the `sync: false` env vars (see table below).
+2. After the service exists, copy its URL (e.g. `https://gong-mcp-gateway.onrender.com`)
+   into the `BASE_URL` env var, and add
+   `https://gong-mcp-gateway.onrender.com/auth/google/callback` as an authorized
+   redirect URI on the Google OAuth client.
+3. Service → **Settings → Deploy Hook** → copy the URL → GitHub repo →
+   **Settings → Secrets and variables → Actions** → new secret
+   `RENDER_DEPLOY_HOOK_URL`.
+4. Trigger the first deploy manually (Render dashboard → Manual Deploy) or push to
+   `main`. Watch the logs for `Gong credential check: OK`.
 
 ### 1. Create a Google OAuth client
 

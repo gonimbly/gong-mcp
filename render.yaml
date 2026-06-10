@@ -3,6 +3,10 @@ services:
     name: gong-mcp-gateway
     runtime: node
     plan: starter
+    branch: main
+    # Deploys are triggered by GitHub Actions (after tests pass) via the
+    # service's deploy hook — see .github/workflows/ci.yml
+    autoDeploy: false
     buildCommand: npm ci && npm run build
     startCommand: npm run start:http
     healthCheckPath: /healthz
