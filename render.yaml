@@ -25,3 +25,5 @@ services:
         sync: false
       - key: GONG_ACCESS_KEY_SECRET
         sync: false
+      - key: GONG_BASE_URL       # org-specific API endpoint, shown in Gong → Settings → API
+        value: https://us-32447.api.gong.io

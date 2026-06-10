@@ -111,6 +111,8 @@ function buildServer(identity: GongIdentity, role: GatewayRole): McpServer {
 // ── Express app ───────────────────────────────────────────────────────────────
 
 const app = express();
+// We always run behind a TLS-terminating proxy (cloudflared locally, Render in prod)
+app.set("trust proxy", 1);
 app.use(express.json({ limit: "4mb" }));
 
 // CORS for browser-based MCP clients
