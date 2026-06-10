@@ -1,0 +1,25 @@
+services:
+  - type: web
+    name: gong-mcp-gateway
+    runtime: node
+    plan: starter
+    buildCommand: npm ci && npm run build
+    startCommand: npm run start:http
+    healthCheckPath: /healthz
+    envVars:
+      - key: BASE_URL            # public URL of this service, e.g. https://gong-mcp-gateway.onrender.com
+        sync: false
+      - key: GOOGLE_OAUTH_CLIENT_ID
+        sync: false
+      - key: GOOGLE_OAUTH_CLIENT_SECRET
+        sync: false
+      - key: SESSION_SIGNING_KEY
+        generateValue: true
+      - key: GONG_ALLOWED_EMAILS # comma-separated pilot allowlist
+        sync: false
+      - key: GONG_ALLOWED_DOMAIN
+        value: gonimbly.com
+      - key: GONG_ACCESS_KEY     # org credential — lives only here, never on user machines
+        sync: false
+      - key: GONG_ACCESS_KEY_SECRET
+        sync: false

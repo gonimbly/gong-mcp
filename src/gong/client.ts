@@ -1,15 +1,33 @@
-import { loadTokens, saveTokens, hasLegacyCredentials } from "./tokenStore.js";
+import { loadTokens, saveTokens, hasLegacyCredentials, type OAuthTokens } from "./tokenStore.js";
 import { refreshAccessToken } from "./oauth.js";
 
 export class GongClient {
   private readonly baseUrl: string;
+  private refreshPromise: Promise<OAuthTokens> | null = null;
 
   constructor(baseUrl?: string) {
-    this.baseUrl = baseUrl ?? "https://api.gong.io";
+    this.baseUrl = baseUrl ?? process.env.GONG_BASE_URL ?? "https://api.gong.io";
+  }
+
+  /**
+   * Server/gateway mode: an org-wide credential supplied via env, held only on the
+   * server. Takes priority over the local per-user OAuth keychain flow.
+   */
+  private getOrgAuthHeader(): string | null {
+    const key = process.env.GONG_ACCESS_KEY;
+    const secret = process.env.GONG_ACCESS_KEY_SECRET;
+    if (!key || !secret) return null;
+    return "Basic " + Buffer.from(`${key}:${secret}`).toString("base64");
+  }
+
+  private async getAuthHeader(): Promise<string> {
+    const orgHeader = this.getOrgAuthHeader();
+    if (orgHeader) return orgHeader;
+    return `Bearer ${await this.getAccessToken()}`;
   }
 
   private async getAccessToken(): Promise<string> {
-    const tokens = loadTokens();
+    const tokens = await loadTokens();
     if (!tokens) {
       if (hasLegacyCredentials()) {
         throw new Error(
@@ -20,9 +38,18 @@ export class GongClient {
     }
 
     if (tokens.expiresAt - Date.now() < 5 * 60 * 1000) {
-      const refreshed = await refreshAccessToken(tokens);
-      saveTokens(refreshed);
-      return refreshed.accessToken;
+      // Deduplicate concurrent refresh calls — only one refresh flies at a time
+      if (!this.refreshPromise) {
+        this.refreshPromise = refreshAccessToken(tokens)
+          .then(async (refreshed) => {
+            await saveTokens(refreshed);
+            return refreshed;
+          })
+          .finally(() => {
+            this.refreshPromise = null;
+          });
+      }
+      return (await this.refreshPromise).accessToken;
     }
 
     return tokens.accessToken;
@@ -30,11 +57,10 @@ export class GongClient {
 
   private async request<T>(path: string, options: RequestInit = {}): Promise<T> {
     const url = `${this.baseUrl}${path}`;
-    const token = await this.getAccessToken();
     const response = await fetch(url, {
       ...options,
       headers: {
-        Authorization: `Bearer ${token}`,
+        Authorization: await this.getAuthHeader(),
         "Content-Type": "application/json",
         ...options.headers,
       },
