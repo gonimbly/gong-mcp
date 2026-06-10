@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import { createServer } from "node:http";
-import { exec } from "node:child_process";
+import { execFile } from "node:child_process";
 import type { AddressInfo } from "node:net";
 import { saveTokens, type OAuthTokens } from "./tokenStore.js";
 
@@ -21,12 +21,15 @@ function generatePKCE(): { verifier: string; challenge: string } {
   return { verifier, challenge };
 }
 
+// Uses execFile (not exec) to avoid shell injection from URL parameters
 function openBrowser(url: string): void {
-  const cmd =
-    process.platform === "darwin" ? `open "${url}"` :
-    process.platform === "win32" ? `start "" "${url}"` :
-    `xdg-open "${url}"`;
-  exec(cmd);
+  if (process.platform === "darwin") {
+    execFile("open", [url]);
+  } else if (process.platform === "win32") {
+    execFile("cmd", ["/c", "start", "", url]);
+  } else {
+    execFile("xdg-open", [url]);
+  }
 }
 
 function basicAuthHeader(clientId: string, clientSecret?: string): string {
@@ -74,11 +77,14 @@ async function exchangeCode(params: {
     expiresAt: Date.now() + data.expires_in * 1000,
     tokenType: data.token_type ?? "Bearer",
     clientId: params.clientId,
-    clientSecret: params.clientSecret,
+    // clientSecret not stored — read from process.env at refresh time
   };
 }
 
 export async function refreshAccessToken(tokens: OAuthTokens): Promise<OAuthTokens> {
+  // Read clientSecret from env at refresh time — never persisted in the token store
+  const clientSecret = process.env.GONG_OAUTH_CLIENT_SECRET;
+
   const body = new URLSearchParams({
     grant_type: "refresh_token",
     refresh_token: tokens.refreshToken,
@@ -88,7 +94,7 @@ export async function refreshAccessToken(tokens: OAuthTokens): Promise<OAuthToke
     method: "POST",
     headers: {
       "Content-Type": "application/x-www-form-urlencoded",
-      Authorization: basicAuthHeader(tokens.clientId, tokens.clientSecret),
+      Authorization: basicAuthHeader(tokens.clientId, clientSecret),
     },
     body: body.toString(),
   });
@@ -113,7 +119,6 @@ export async function refreshAccessToken(tokens: OAuthTokens): Promise<OAuthToke
     expiresAt: Date.now() + data.expires_in * 1000,
     tokenType: data.token_type ?? "Bearer",
     clientId: tokens.clientId,
-    clientSecret: tokens.clientSecret,
   };
 }
 
@@ -222,7 +227,7 @@ export async function startOAuthFlow(): Promise<OAuthTokens> {
 
     const code = await waitForCallback;
     const tokens = await exchangeCode({ code, redirectUri, codeVerifier: verifier, clientId, clientSecret });
-    saveTokens(tokens);
+    await saveTokens(tokens);
     return tokens;
   } finally {
     inProgress = false;

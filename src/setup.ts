@@ -38,7 +38,7 @@ function installToClaudeDesktop(clientId: string, clientSecret?: string): void {
   };
   config.mcpServers = mcpServers;
 
-  writeFileSync(configPath, JSON.stringify(config, null, 2));
+  writeFileSync(configPath, JSON.stringify(config, null, 2), { mode: 0o600 });
 }
 
 // ── Prompts ───────────────────────────────────────────────────────────────────

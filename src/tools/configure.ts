@@ -20,7 +20,8 @@ export function registerConfigureTool(server: McpServer) {
       }
 
       try {
-        const tokens = loadTokens()!;
+        const tokens = await loadTokens();
+        if (!tokens) throw new Error("Tokens not found after login");
         const res = await fetch("https://api.gong.io/v2/workspaces", {
           headers: { Authorization: `Bearer ${tokens.accessToken}` },
         });
@@ -50,7 +51,7 @@ export function registerConfigureTool(server: McpServer) {
     "Disconnect your Gong account and clear all stored OAuth tokens.",
     {},
     async () => {
-      clearTokens();
+      await clearTokens();
       return {
         content: [{
           type: "text" as const,
@@ -65,7 +66,9 @@ export function registerConfigureTool(server: McpServer) {
     "Check the current Gong authentication status and token validity.",
     {},
     async () => {
-      if (hasLegacyCredentials() && !loadTokens()) {
+      const tokens = await loadTokens();
+
+      if (hasLegacyCredentials() && !tokens) {
         return {
           content: [{
             type: "text" as const,
@@ -74,7 +77,6 @@ export function registerConfigureTool(server: McpServer) {
         };
       }
 
-      const tokens = loadTokens();
       if (!tokens) {
         return {
           content: [{
