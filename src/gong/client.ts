@@ -59,12 +59,23 @@ export class GongClient {
     const url = `${this.baseUrl}${path}`;
     const response = await fetch(url, {
       ...options,
+      // Never follow redirects: fetch strips the Authorization header on
+      // cross-origin redirects, which surfaces as a confusing Gong 401.
+      redirect: "manual",
       headers: {
         Authorization: await this.getAuthHeader(),
         "Content-Type": "application/json",
         ...options.headers,
       },
     });
+
+    if (response.status >= 300 && response.status < 400) {
+      const location = response.headers.get("location") ?? "unknown";
+      throw new Error(
+        `Gong API redirected ${url} to ${location}. ` +
+        `Set GONG_BASE_URL to your org's API endpoint (shown in Gong → Settings → API).`
+      );
+    }
 
     if (!response.ok) {
       const text = await response.text().catch(() => "");

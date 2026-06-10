@@ -219,5 +219,11 @@ const port = Number(process.env.PORT ?? 8080);
 app.listen(port, () => {
   console.error(`[gateway] Gong MCP gateway listening on :${port}`);
   console.error(`[gateway] MCP endpoint: ${config.baseUrl}/mcp`);
+  console.error(`[gateway] Gong API: ${process.env.GONG_BASE_URL ?? "https://api.gong.io (default — set GONG_BASE_URL if your org uses a regional endpoint)"}`);
   console.error(`[gateway] Pilot allowlist: ${[...config.allowedEmails].join(", ")}`);
+
+  // Credential self-check so misconfiguration fails loudly at boot, not during a user session
+  gongClient.listWorkspaces()
+    .then(() => console.error("[gateway] Gong credential check: OK"))
+    .catch((err) => console.error(`[gateway] Gong credential check FAILED: ${err instanceof Error ? err.message : err}`));
 });
