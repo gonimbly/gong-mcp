@@ -16,6 +16,7 @@ import { mcpAuthRouter, getOAuthProtectedResourceMetadataUrl } from "@modelconte
 import { requireBearerAuth } from "@modelcontextprotocol/sdk/server/auth/middleware/bearerAuth.js";
 import { GoogleOAuthProvider, loadGatewayConfig } from "./auth/googleProvider.js";
 import { GongClient } from "./gong/client.js";
+import { ScopedGongClient, type GatewayRole } from "./gong/scopedClient.js";
 import { resolveGongIdentity, type GongIdentity } from "./gong/identity.js";
 import { registerCallTools } from "./tools/calls.js";
 import { registerUserTools } from "./tools/users.js";
@@ -71,33 +72,39 @@ setInterval(() => {
   }
 }, 60 * 60 * 1000).unref();
 
-function buildServer(identity: GongIdentity): McpServer {
-  const server = new McpServer({ name: "gong-mcp", version: "0.3.0" });
+function buildServer(identity: GongIdentity, role: GatewayRole): McpServer {
+  const server = new McpServer({ name: "gong-mcp", version: "0.4.0" });
+  // Every tool call in this session goes through the policy layer bound to this user
+  const client = new ScopedGongClient(identity, role);
 
   server.tool(
     "gong_whoami",
-    "Show who is connected to the Gong MCP gateway and their Gong identity.",
+    "Show who is connected to the Gong MCP gateway, their Gong identity and access level.",
     {},
     async () => ({
       content: [{
         type: "text" as const,
-        text: `Connected as ${identity.email} (Gong user ${identity.userId}${identity.fullName ? `, ${identity.fullName}` : ""}).`,
+        text:
+          `Connected as ${identity.email} (Gong user ${identity.userId}${identity.fullName ? `, ${identity.fullName}` : ""}). ` +
+          (role === "admin"
+            ? "Access level: admin (org-wide data)."
+            : "Access level: member — calls and stats are limited to your own activity."),
       }],
     })
   );
 
-  registerCallTools(server, gongClient);
-  registerUserTools(server, gongClient);
-  registerStatsTools(server, gongClient);
-  registerEntityTools(server, gongClient);
-  registerSettingsTools(server, gongClient);
-  registerLibraryTools(server, gongClient);
-  registerCrmTools(server, gongClient);
-  registerFlowTools(server, gongClient);
-  registerMeetingTools(server, gongClient);
-  registerPermissionTools(server, gongClient);
-  registerDataPrivacyTools(server, gongClient);
-  registerLogTools(server, gongClient);
+  registerCallTools(server, client);
+  registerUserTools(server, client);
+  registerStatsTools(server, client);
+  registerEntityTools(server, client);
+  registerSettingsTools(server, client);
+  registerLibraryTools(server, client);
+  registerCrmTools(server, client);
+  registerFlowTools(server, client);
+  registerMeetingTools(server, client);
+  registerPermissionTools(server, client);
+  registerDataPrivacyTools(server, client);
+  registerLogTools(server, client);
   return server;
 }
 
@@ -163,18 +170,19 @@ app.post("/mcp", bearer, async (req, res) => {
       return res.status(403).json({ error: `No Gong account found for ${email}` });
     }
 
+    const role: GatewayRole = config.adminEmails.has(email) ? "admin" : "member";
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: () => randomUUID(),
       onsessioninitialized: (id) => {
         sessions.set(id, { transport, email, identity, lastSeen: Date.now() });
-        console.error(`[gateway] Session ${id} started for ${email} (Gong user ${identity.userId})`);
+        console.error(`[gateway] Session ${id} started for ${email} (Gong user ${identity.userId}, role ${role})`);
       },
     });
     transport.onclose = () => {
       if (transport.sessionId) sessions.delete(transport.sessionId);
     };
 
-    const server = buildServer(identity);
+    const server = buildServer(identity, role);
     await server.connect(transport);
     await transport.handleRequest(req, res, req.body);
   } catch (err) {

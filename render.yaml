@@ -15,7 +15,9 @@ services:
         sync: false
       - key: SESSION_SIGNING_KEY
         generateValue: true
-      - key: GONG_ALLOWED_EMAILS # comma-separated pilot allowlist
+      - key: GONG_ALLOWED_EMAILS # comma-separated allowlist of users who can sign in
+        sync: false
+      - key: GONG_ADMIN_EMAILS   # comma-separated subset with org-wide access (others are members)
         sync: false
       - key: GONG_ALLOWED_DOMAIN
         value: gonimbly.com

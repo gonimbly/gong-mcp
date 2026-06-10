@@ -1,4 +1,4 @@
-# Remote MCP Gateway (Phase 1)
+# Remote MCP Gateway
 
 A hosted deployment mode where the Gong MCP runs as a web service and each user
 connects from Claude with their own identity. The org-wide Gong credential lives
@@ -15,9 +15,22 @@ call the API is org-wide. The only way to give individual users scoped access is
 the credential behind a gateway that authenticates each user and (Phase 2) filters what
 each user can see.
 
-**Phase 1 scope:** transport + authentication + identity mapping. Tools return org-wide
-data, so access is restricted to a small pilot allowlist (`GONG_ALLOWED_EMAILS`).
-**Phase 2 adds:** per-tool data filtering (own-calls-only, admin-only tools, etc.).
+## Access model
+
+Every user is either a **member** or an **admin** (`GONG_ADMIN_EMAILS`). Admins get
+org-wide passthrough. For members, every tool call goes through a policy layer
+(`src/gong/scopedClient.ts`) bound to their Gong identity:
+
+| Policy | Behavior | Applies to |
+|---|---|---|
+| **Participant-checked** | Only calls the member took part in are returned; transcripts of other calls are refused | `gong_list_calls`, `gong_get_call`, `gong_get_extensive_calls`, `gong_get_transcripts` |
+| **Self-scoped** | The member's own Gong userId is forced into the filter — user-supplied `userIds` are ignored | all stats tools, coaching |
+| **Admin-only** | Refused with a clear message | AI Q&A/briefs (they synthesize from org-wide calls), all writes (calls, CRM, meetings, flows, tasks, engagement), permissions, data privacy, audit logs, integrations, extensive user data |
+| **Open** | Allowed as-is (harmless or deliberately shared metadata) | workspaces, trackers, scorecards, user directory, library folders, flow/CRM reads |
+
+Denials are logged server-side (`[policy] DENY …`) for auditability. Member call
+listings are filtered per page, so a page may contain fewer items than the page
+size — clients should keep paginating with the returned cursor.
 
 ## How authentication works
 
@@ -56,7 +69,8 @@ This is the server-side credential; it is never shared with users.
 | `BASE_URL` | Public URL of the service, no trailing slash |
 | `GOOGLE_OAUTH_CLIENT_ID` / `GOOGLE_OAUTH_CLIENT_SECRET` | From step 1 |
 | `SESSION_SIGNING_KEY` | Long random string (Render generates it via the blueprint) |
-| `GONG_ALLOWED_EMAILS` | Comma-separated pilot allowlist |
+| `GONG_ALLOWED_EMAILS` | Comma-separated allowlist of users who can sign in |
+| `GONG_ADMIN_EMAILS` | Comma-separated subset with org-wide access; everyone else is a member |
 | `GONG_ALLOWED_DOMAIN` | Defaults to `gonimbly.com` |
 | `GONG_ACCESS_KEY` / `GONG_ACCESS_KEY_SECRET` | From step 2 |
 
@@ -86,11 +100,14 @@ claude mcp add --transport http gong https://<your-service>.onrender.com/mcp
 URL `https://<your-service>.onrender.com/mcp`. Claude runs the Google sign-in flow
 in the browser on first use.
 
-## Phase 1 limitations
+## Known limitations
 
-- **No per-user data filtering yet** — every allowlisted user sees org-wide data.
-  Keep the allowlist to pilot users who already have broad Gong visibility.
+- **Member visibility is "own calls only"** — narrower than Gong's native permission
+  profiles (no team/manager hierarchy yet). Mirroring Gong profiles is a possible
+  future enhancement.
 - **In-memory sessions and client registrations** — a deploy or restart requires
   clients to re-authenticate (Claude handles this automatically).
 - **Stateless JWTs** — removing a user from the allowlist takes effect at next token
   refresh (max 8 h). For immediate revocation, rotate `SESSION_SIGNING_KEY`.
+- **Member call listings route through `/v2/calls/extensive`** and default to a 90-day
+  window when no date range is given.

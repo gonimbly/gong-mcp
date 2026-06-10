@@ -21,6 +21,7 @@ export interface GatewayConfig {
   googleClientSecret: string;
   signingKey: string;
   allowedEmails: Set<string>;  // lowercase
+  adminEmails: Set<string>;    // lowercase subset of allowedEmails with admin role
   allowedDomain: string;       // e.g. "gonimbly.com"
 }
 
@@ -39,12 +40,25 @@ export function loadGatewayConfig(): GatewayConfig {
     throw new Error("GONG_ALLOWED_EMAILS must contain at least one email (comma-separated).");
   }
 
+  const adminEmails = new Set(
+    (process.env.GONG_ADMIN_EMAILS ?? "")
+      .split(",")
+      .map((e) => e.trim().toLowerCase())
+      .filter(Boolean)
+  );
+  for (const admin of adminEmails) {
+    if (!allowedEmails.has(admin)) {
+      throw new Error(`GONG_ADMIN_EMAILS contains ${admin}, which is not in GONG_ALLOWED_EMAILS.`);
+    }
+  }
+
   return {
     baseUrl: required("BASE_URL").replace(/\/$/, ""),
     googleClientId: required("GOOGLE_OAUTH_CLIENT_ID"),
     googleClientSecret: required("GOOGLE_OAUTH_CLIENT_SECRET"),
     signingKey: required("SESSION_SIGNING_KEY"),
     allowedEmails,
+    adminEmails,
     allowedDomain: (process.env.GONG_ALLOWED_DOMAIN ?? "gonimbly.com").toLowerCase(),
   };
 }
