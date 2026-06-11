@@ -95,10 +95,23 @@ const range = {
   toDateTime: new Date().toISOString(),
 };
 
+interface CallParty {
+  userId?: string;
+  emailAddress?: string;
+}
 interface CallRecord {
   metaData?: { id?: string; title?: string };
-  parties?: Array<{ userId?: string }>;
+  parties?: CallParty[];
 }
+
+// Mirror of PolicyGongClient.isVisibleCall: a party matches by userId in the
+// visible set OR by the user's own email (unlinked attendee records).
+const hasInPolicyParty = (parties: CallParty[] | undefined, visible: Set<string>): boolean =>
+  (parties ?? []).some(
+    (p) =>
+      (p.userId && visible.has(String(p.userId))) ||
+      (p.emailAddress && p.emailAddress.toLowerCase() === identity.email)
+  );
 interface CallsPage {
   calls?: CallRecord[];
   records?: { totalRecords?: number; cursor?: string };
@@ -134,23 +147,27 @@ const { calls: scopedList } = await allPages((cursor) => scoped.getExtensiveCall
 }) as Promise<CallsPage>);
 const scopedIds = new Set(scopedList.map((c) => String(c.metaData?.id)));
 
-const callsAccess = (policy.perWorkspace.get(CUSTOMERS) ?? policy.perWorkspace.get("*"))?.calls;
+// No profile in the workspace (and not degraded) → the policy client enforces
+// own-calls-only there; verify against that expectation instead of skipping.
+const callsAccess = (policy.perWorkspace.get(CUSTOMERS) ?? policy.perWorkspace.get("*"))?.calls
+  ?? { level: "none" as const, visibleUserIds: new Set([identity.userId]) };
 const hiddenCalls = rawList.filter((c) => !scopedIds.has(String(c.metaData?.id)));
 console.log(`  raw org client: ${rawList.length}/${rawTotal} calls in range | policy client: ${scopedIds.size} | hidden: ${hiddenCalls.length}`);
 
-if (callsAccess?.visibleUserIds === null) {
-  check("calls: unrestricted profile sees everything", scopedIds.size === rawList.length,
-    `${scopedIds.size}/${rawList.length} visible (callsAccess=all)`);
-} else if (callsAccess) {
-  const visible = callsAccess.visibleUserIds!;
+if (callsAccess.visibleUserIds === null) {
+  // Compare on "nothing hidden" rather than equal counts: a call recorded
+  // between the two fetches would otherwise fail this spuriously.
+  check("calls: unrestricted profile sees everything", hiddenCalls.length === 0,
+    `${scopedIds.size} visible, ${hiddenCalls.length} hidden of ${rawList.length} raw (callsAccess=all)`);
+} else {
+  const visible = callsAccess.visibleUserIds;
   const wronglyShown = scopedList.filter((c) => {
     const call = rawList.find((r) => String(r.metaData?.id) === String(c.metaData?.id));
-    return call && !(call.parties ?? []).some((p) => p.userId && visible.has(String(p.userId)));
+    return call && !hasInPolicyParty(call.parties, visible);
   });
   check("calls: every visible call has an in-policy party", wronglyShown.length === 0,
     wronglyShown.length === 0 ? `all ${scopedIds.size} visible calls justified` : `${wronglyShown.length} calls leaked!`);
-  const wronglyHidden = hiddenCalls.filter((c) =>
-    (c.parties ?? []).some((p) => p.userId && visible.has(String(p.userId))));
+  const wronglyHidden = hiddenCalls.filter((c) => hasInPolicyParty(c.parties, visible));
   check("calls: no in-policy call is wrongly hidden", wronglyHidden.length === 0,
     `${wronglyHidden.length} wrongly hidden of ${hiddenCalls.length} hidden`);
 }
@@ -179,16 +196,16 @@ if (scopedIds.size > 0) {
 
 console.log(`\n— People Ops workspace (fail-closed check) —`);
 const poWs = policy.perWorkspace.get(PEOPLE_OPS) ?? policy.perWorkspace.get("*");
-const poCalls = await scoped.getExtensiveCalls({ filter: { ...range, workspaceId: PEOPLE_OPS } }) as { calls?: Array<{ parties?: Array<{ userId?: string }> }> };
+// First page is enough for a smoke check of this workspace.
+const poCalls = await scoped.getExtensiveCalls({ filter: { ...range, workspaceId: PEOPLE_OPS } }) as CallsPage;
 // No profile in the workspace (undefined) means own-calls-only; an unrestricted
 // profile (visibleUserIds === null) means there is nothing to hide. Don't conflate them.
 const poVisible: Set<string> | null = poWs ? poWs.calls.visibleUserIds : new Set([identity.userId]);
 const hasPeopleOps = poWs !== undefined;
 if (poVisible !== null) {
-  const leaked = (poCalls.calls ?? []).filter((c) =>
-    !(c.parties ?? []).some((p) => p.userId && poVisible.has(String(p.userId))));
+  const leaked = (poCalls.calls ?? []).filter((c) => !hasInPolicyParty(c.parties, poVisible));
   check("People Ops: only in-policy calls visible", leaked.length === 0,
-    `${poCalls.calls?.length ?? 0} visible, ${leaked.length} unjustified${hasPeopleOps ? "" : " (no profile there → own calls only)"}`);
+    `${poCalls.calls?.length ?? 0} visible (first page), ${leaked.length} unjustified${hasPeopleOps ? "" : " (no profile there → own calls only)"}`);
 } else {
   console.log("  (profile grants unrestricted People Ops calls — nothing to hide)");
 }
@@ -196,9 +213,11 @@ if (poVisible !== null) {
 // ── 4. Stats scoping ──────────────────────────────────────────────────────────
 
 console.log(`\n— Stats —`);
-const statsAccess = (policy.perWorkspace.get(CUSTOMERS) ?? policy.perWorkspace.get("*"))?.stats;
-if (statsAccess?.visibleUserIds !== null) {
-  const visible = statsAccess!.visibleUserIds!;
+// Same own-data-only fallback as calls: `undefined !== null` must not crash us
+const statsAccess = (policy.perWorkspace.get(CUSTOMERS) ?? policy.perWorkspace.get("*"))?.stats
+  ?? { level: "none" as const, visibleUserIds: new Set([identity.userId]) };
+if (statsAccess.visibleUserIds !== null) {
+  const visible = statsAccess.visibleUserIds;
   const dateRange = {
     fromDate: range.fromDateTime.slice(0, 10),
     toDate: range.toDateTime.slice(0, 10),
@@ -232,7 +251,7 @@ if (statsAccess?.visibleUserIds !== null) {
 // ── 5. AI tools & admin surface ───────────────────────────────────────────────
 
 console.log(`\n— AI + admin gates —`);
-if ((policy.perWorkspace.get(CUSTOMERS) ?? policy.perWorkspace.get("*"))?.calls.visibleUserIds !== null) {
+if (callsAccess.visibleUserIds !== null) {
   await expectDenied("AI: askAccount without org-wide call access", () =>
     scoped.askAccount({ workspaceId: CUSTOMERS, crmAccountId: "any", fromDateTime: range.fromDateTime, toDateTime: range.toDateTime, question: "test" }));
 } else {
