@@ -148,12 +148,15 @@ if (scopedIds.size > 0) {
 // ── 3. People Ops workspace (no profile there → own data only) ───────────────
 
 console.log(`\n— People Ops workspace (fail-closed check) —`);
-const hasPeopleOps = policy.perWorkspace.has(PEOPLE_OPS);
+const poWs = policy.perWorkspace.get(PEOPLE_OPS) ?? policy.perWorkspace.get("*");
 const poCalls = await scoped.getExtensiveCalls({ filter: { ...range, workspaceId: PEOPLE_OPS } }) as { calls?: Array<{ parties?: Array<{ userId?: string }> }> };
-const poVisible = policy.perWorkspace.get(PEOPLE_OPS)?.calls.visibleUserIds ?? new Set([identity.userId]);
-if (!hasPeopleOps || poVisible !== null) {
+// No profile in the workspace (undefined) means own-calls-only; an unrestricted
+// profile (visibleUserIds === null) means there is nothing to hide. Don't conflate them.
+const poVisible: Set<string> | null = poWs ? poWs.calls.visibleUserIds : new Set([identity.userId]);
+const hasPeopleOps = poWs !== undefined;
+if (poVisible !== null) {
   const leaked = (poCalls.calls ?? []).filter((c) =>
-    !(c.parties ?? []).some((p) => p.userId && (poVisible === null || poVisible.has(String(p.userId)))));
+    !(c.parties ?? []).some((p) => p.userId && poVisible.has(String(p.userId))));
   check("People Ops: only in-policy calls visible", leaked.length === 0,
     `${poCalls.calls?.length ?? 0} visible, ${leaked.length} unjustified${hasPeopleOps ? "" : " (no profile there → own calls only)"}`);
 } else {
