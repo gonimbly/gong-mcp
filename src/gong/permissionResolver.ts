@@ -327,7 +327,8 @@ export class PermissionResolver {
     const managerOf = new Map<string, string>();
     let cursor: string | undefined;
     do {
-      const page = (await this.client.getExtensiveUsers(cursor ? { cursor } : {})) as {
+      // The live API rejects a bare {} body — `filter` must be present even when empty
+      const page = (await this.client.getExtensiveUsers({ filter: {}, ...(cursor ? { cursor } : {}) })) as {
         users?: Array<{ id: string; managerId?: string | null; active?: boolean }>;
         records?: { cursor?: string };
       };

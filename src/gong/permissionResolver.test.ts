@@ -33,11 +33,12 @@ const PEOPLE_OPS = "815177878201176809";
 let failNextSnapshot = false;
 let apiCalls = 0;
 
-globalThis.fetch = (async (input: any) => {
+globalThis.fetch = (async (input: any, init?: any) => {
   const url = String(input);
   apiCalls++;
   if (failNextSnapshot) return new Response("boom", { status: 500 });
   const json = (data: unknown) => new Response(JSON.stringify(data), { status: 200 });
+  const body = init?.body ? JSON.parse(init.body) : undefined;
 
   if (url.includes("/v2/workspaces")) return json({ workspaces: WORKSPACES });
   if (url.includes("/v2/all-permission-profiles")) {
@@ -49,6 +50,10 @@ globalThis.fetch = (async (input: any) => {
     return json({ users: (PROFILE_USERS[profileId] ?? []).map((id) => ({ id })) });
   }
   if (url.includes("/v2/users/extensive")) {
+    // The live API rejects a body without `filter` (observed 2026-06-11)
+    if (!body || !("filter" in body)) {
+      return new Response(JSON.stringify({ errors: ["Json parse error"] }), { status: 400 });
+    }
     return json({ users: MANAGER_GRAPH, records: {} });
   }
   return json({ ok: true });
