@@ -4,7 +4,10 @@
 the Gong UI — driven by their actual Gong permission profile, not the current binary
 admin/member model.
 
-**Status:** plan (handoff). Phases 1–2 are live at `gong-mcp-5nu8.onrender.com`.
+**Status:** 3a–3c implemented (`permissionResolver.ts`, `policyClient.ts`, `policyShadow.ts`,
+`GONG_POLICY_MODE` switch — see [phase3a-discovery.md](phase3a-discovery.md) for live-data
+findings). Remaining: 3d shadow soak in prod, 3e flip + persona A/B. Phases 1–2 are live
+at `gong-mcp-5nu8.onrender.com`.
 
 ---
 

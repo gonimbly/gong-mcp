@@ -17,6 +17,9 @@ import { requireBearerAuth } from "@modelcontextprotocol/sdk/server/auth/middlew
 import { GoogleOAuthProvider, loadGatewayConfig } from "./auth/googleProvider.js";
 import { GongClient } from "./gong/client.js";
 import { ScopedGongClient, type GatewayRole } from "./gong/scopedClient.js";
+import { PolicyGongClient } from "./gong/policyClient.js";
+import { PermissionResolver, degradedPolicy, type UserPolicy } from "./gong/permissionResolver.js";
+import { shadowGongClient } from "./gong/policyShadow.js";
 import { resolveGongIdentity, type GongIdentity } from "./gong/identity.js";
 import { registerCallTools } from "./tools/calls.js";
 import { registerUserTools } from "./tools/users.js";
@@ -51,6 +54,68 @@ if (!process.env.GONG_ACCESS_KEY || !process.env.GONG_ACCESS_KEY_SECRET) {
 const provider = new GoogleOAuthProvider(config);
 const gongClient = new GongClient();
 
+// ── Policy mode (Phase 3) ─────────────────────────────────────────────────────
+//  binary   — Phase 2 admin/member model (default)
+//  shadow   — enforce binary, log every place the profile-based policy disagrees
+//  profiles — enforce the user's Gong permission profile
+type PolicyMode = "binary" | "shadow" | "profiles";
+
+const policyMode: PolicyMode = (() => {
+  const raw = process.env.GONG_POLICY_MODE ?? "binary";
+  if (raw === "binary" || raw === "shadow" || raw === "profiles") return raw;
+  throw new Error(`Invalid GONG_POLICY_MODE "${raw}" — expected binary | shadow | profiles`);
+})();
+
+const permissionResolver = new PermissionResolver(gongClient);
+
+/**
+ * Resolve the user's profile policy, failing CLOSED: any resolver error
+ * degrades to the Phase 2 member policy (own data only), never to open access.
+ */
+async function resolveUserPolicy(identity: GongIdentity): Promise<UserPolicy> {
+  try {
+    return await permissionResolver.resolvePolicy(identity.userId, identity.email);
+  } catch (err) {
+    console.error(
+      `[policy] DEGRADED ${identity.email} to the Phase 2 member policy: ` +
+      `${err instanceof Error ? err.message : err}`
+    );
+    return degradedPolicy(identity.userId, identity.email);
+  }
+}
+
+async function buildSessionClient(identity: GongIdentity, role: GatewayRole): Promise<{ client: GongClient; access: string }> {
+  // Break-glass admins keep org-wide passthrough in every mode
+  if (policyMode === "binary" || (policyMode === "profiles" && role === "admin")) {
+    return {
+      client: new ScopedGongClient(identity, role),
+      access: role === "admin"
+        ? "admin (org-wide data)"
+        : "member — calls and stats are limited to your own activity",
+    };
+  }
+
+  const policy = await resolveUserPolicy(identity);
+
+  if (policyMode === "shadow") {
+    const binary = new ScopedGongClient(identity, role);
+    return {
+      client: shadowGongClient(binary, identity, role, policy.degraded ? null : policy),
+      access: role === "admin"
+        ? "admin (org-wide data)"
+        : "member — calls and stats are limited to your own activity",
+    };
+  }
+
+  const profileNames = [...policy.perWorkspace.values()].map((ws) => ws.profileName).join("; ");
+  return {
+    client: new PolicyGongClient(identity, policy),
+    access: policy.degraded
+      ? "member (fallback) — your Gong permission profile could not be resolved, so access is limited to your own activity"
+      : `mirrors your Gong permission profile (${profileNames})`,
+  };
+}
+
 // ── Per-session state ─────────────────────────────────────────────────────────
 
 interface Session {
@@ -72,10 +137,9 @@ setInterval(() => {
   }
 }, 60 * 60 * 1000).unref();
 
-function buildServer(identity: GongIdentity, role: GatewayRole): McpServer {
-  const server = new McpServer({ name: "gong-mcp", version: "0.4.0" });
+function buildServer(identity: GongIdentity, client: GongClient, access: string): McpServer {
+  const server = new McpServer({ name: "gong-mcp", version: "0.5.0" });
   // Every tool call in this session goes through the policy layer bound to this user
-  const client = new ScopedGongClient(identity, role);
 
   server.tool(
     "gong_whoami",
@@ -86,9 +150,7 @@ function buildServer(identity: GongIdentity, role: GatewayRole): McpServer {
         type: "text" as const,
         text:
           `Connected as ${identity.email} (Gong user ${identity.userId}${identity.fullName ? `, ${identity.fullName}` : ""}). ` +
-          (role === "admin"
-            ? "Access level: admin (org-wide data)."
-            : "Access level: member — calls and stats are limited to your own activity."),
+          `Access level: ${access}.`,
       }],
     })
   );
@@ -173,18 +235,22 @@ app.post("/mcp", bearer, async (req, res) => {
     }
 
     const role: GatewayRole = config.adminEmails.has(email) ? "admin" : "member";
+    const { client, access } = await buildSessionClient(identity, role);
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: () => randomUUID(),
       onsessioninitialized: (id) => {
         sessions.set(id, { transport, email, identity, lastSeen: Date.now() });
-        console.error(`[gateway] Session ${id} started for ${email} (Gong user ${identity.userId}, role ${role})`);
+        console.error(
+          `[gateway] Session ${id} started for ${email} (Gong user ${identity.userId}, role ${role}, ` +
+          `policy mode ${policyMode}, access: ${access})`
+        );
       },
     });
     transport.onclose = () => {
       if (transport.sessionId) sessions.delete(transport.sessionId);
     };
 
-    const server = buildServer(identity, role);
+    const server = buildServer(identity, client, access);
     await server.connect(transport);
     await transport.handleRequest(req, res, req.body);
   } catch (err) {
@@ -219,6 +285,7 @@ const port = Number(process.env.PORT ?? 8080);
 app.listen(port, () => {
   console.error(`[gateway] Gong MCP gateway listening on :${port}`);
   console.error(`[gateway] MCP endpoint: ${config.baseUrl}/mcp`);
+  console.error(`[gateway] Policy mode: ${policyMode}${policyMode === "binary" ? " (Phase 2 admin/member)" : ""}`);
   console.error(`[gateway] Gong API: ${process.env.GONG_BASE_URL ?? "https://api.gong.io (default — set GONG_BASE_URL if your org uses a regional endpoint)"}`);
   console.error(
     config.allowedEmails
