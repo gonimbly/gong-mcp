@@ -19,9 +19,10 @@ services:
         sync: false
       - key: SESSION_SIGNING_KEY
         generateValue: true
-      - key: GONG_ALLOWED_EMAILS # comma-separated allowlist of users who can sign in
-        sync: false
-      - key: GONG_ADMIN_EMAILS   # comma-separated subset with org-wide access (others are members)
+      # GONG_ALLOWED_EMAILS is optional — when unset, any verified account on
+      # GONG_ALLOWED_DOMAIN can sign in (member access). Set it only to restrict
+      # sign-in to specific people, e.g. during a pilot.
+      - key: GONG_ADMIN_EMAILS   # comma-separated admins with org-wide access (others are members)
         sync: false
       - key: GONG_ALLOWED_DOMAIN
         value: gonimbly.com

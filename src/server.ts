@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 /**
- * Remote MCP gateway (Phase 1).
+ * Remote MCP gateway.
  *
- * Claude connects here over Streamable HTTP. Users authenticate via Google OIDC
- * (restricted to the company domain + a pilot allowlist). The org-wide Gong
- * credential lives only in this process's environment — it is never sent to
- * clients. Per-user data filtering lands in Phase 2; until then, access is
- * limited to the GONG_ALLOWED_EMAILS pilot allowlist.
+ * Claude connects here over Streamable HTTP. Users authenticate via Google OIDC,
+ * restricted to GONG_ALLOWED_DOMAIN (optionally narrowed by GONG_ALLOWED_EMAILS).
+ * The org-wide Gong credential lives only in this process's environment — it is
+ * never sent to clients. Every session is bound to the user's Gong identity and
+ * role; members go through the policy layer in src/gong/scopedClient.ts.
  */
 import express from "express";
 import { randomUUID } from "node:crypto";
@@ -220,7 +220,11 @@ app.listen(port, () => {
   console.error(`[gateway] Gong MCP gateway listening on :${port}`);
   console.error(`[gateway] MCP endpoint: ${config.baseUrl}/mcp`);
   console.error(`[gateway] Gong API: ${process.env.GONG_BASE_URL ?? "https://api.gong.io (default — set GONG_BASE_URL if your org uses a regional endpoint)"}`);
-  console.error(`[gateway] Pilot allowlist: ${[...config.allowedEmails].join(", ")}`);
+  console.error(
+    config.allowedEmails
+      ? `[gateway] Sign-in restricted to: ${[...config.allowedEmails].join(", ")}`
+      : `[gateway] Sign-in open to all verified ${config.allowedDomain} accounts`
+  );
 
   // Credential self-check so misconfiguration fails loudly at boot, not during a user session
   gongClient.listWorkspaces()
