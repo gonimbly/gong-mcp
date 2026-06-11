@@ -4,6 +4,11 @@ A Model Context Protocol server for the [Gong REST API](https://gong.app.gong.io
 
 > Your Gong data is sitting there, full of signal. This gets it talking to Claude.
 
+Two ways to run it:
+
+- **Hosted gateway (recommended for teams)** — a deployed web service with Google SSO and per-user data access control: members only see their own calls and stats. No local install; users just add a connector URL in Claude. See [docs/remote-gateway.md](docs/remote-gateway.md).
+- **Local install (below)** — runs on your machine via stdio, authenticating with a Gong OAuth app. Full org access for whoever holds the credential.
+
 ---
 
 ## Install

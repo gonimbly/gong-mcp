@@ -38,10 +38,11 @@ size — clients should keep paginating with the returned cursor.
    OAuth metadata automatically and registers itself via Dynamic Client Registration.
 2. Claude sends the user to the gateway's `/authorize`, which redirects to Google
    sign-in (restricted to the company domain).
-3. After Google sign-in, the gateway checks the email against `GONG_ALLOWED_EMAILS`,
-   then redirects back to Claude with an authorization code.
+3. After Google sign-in, the gateway verifies the account is on `GONG_ALLOWED_DOMAIN`
+   (and on `GONG_ALLOWED_EMAILS` if that restriction is set), then redirects back to
+   Claude with an authorization code.
 4. Claude exchanges the code (PKCE-verified) for a gateway-issued JWT
-   (8 h access / 30 d refresh). The allowlist is re-checked on every refresh.
+   (8 h access / 30 d refresh). Domain and allowlist are re-checked on every refresh.
 5. On the first MCP request, the gateway resolves the user's email to their Gong user ID
    (`/v2/users` lookup) and binds it to the session. A session can only be used by the
    user who created it.
@@ -102,7 +103,7 @@ This is the server-side credential; it is never shared with users.
 BASE_URL=http://localhost:8080 \
 GOOGLE_OAUTH_CLIENT_ID=... GOOGLE_OAUTH_CLIENT_SECRET=... \
 SESSION_SIGNING_KEY=dev-key \
-GONG_ALLOWED_EMAILS=you@gonimbly.com \
+GONG_ALLOWED_EMAILS=you@gonimbly.com \  # optional — restrict sign-in while developing
 GONG_DEV_KEYCHAIN_FALLBACK=1 \
 npm run dev:http
 ```
@@ -129,7 +130,8 @@ in the browser on first use.
   future enhancement.
 - **In-memory sessions and client registrations** — a deploy or restart requires
   clients to re-authenticate (Claude handles this automatically).
-- **Stateless JWTs** — removing a user from the allowlist takes effect at next token
-  refresh (max 8 h). For immediate revocation, rotate `SESSION_SIGNING_KEY`.
+- **Stateless JWTs** — access revocation (removing someone from the allowlist, or a
+  user leaving the Google domain) takes effect at next token refresh (max 8 h). For
+  immediate revocation of everyone's sessions, rotate `SESSION_SIGNING_KEY`.
 - **Member call listings route through `/v2/calls/extensive`** and default to a 90-day
   window when no date range is given.

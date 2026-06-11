@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 /**
- * Remote MCP gateway (Phase 1).
+ * Remote MCP gateway.
  *
- * Claude connects here over Streamable HTTP. Users authenticate via Google OIDC
- * (restricted to the company domain + a pilot allowlist). The org-wide Gong
- * credential lives only in this process's environment — it is never sent to
- * clients. Per-user data filtering lands in Phase 2; until then, access is
- * limited to the GONG_ALLOWED_EMAILS pilot allowlist.
+ * Claude connects here over Streamable HTTP. Users authenticate via Google OIDC,
+ * restricted to GONG_ALLOWED_DOMAIN (optionally narrowed by GONG_ALLOWED_EMAILS).
+ * The org-wide Gong credential lives only in this process's environment — it is
+ * never sent to clients. Every session is bound to the user's Gong identity and
+ * role; members go through the policy layer in src/gong/scopedClient.ts.
  */
 import express from "express";
 import { randomUUID } from "node:crypto";
