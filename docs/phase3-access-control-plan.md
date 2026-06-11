@@ -63,12 +63,36 @@ Supporting APIs already wrapped in `src/gong/client.ts`:
 
 ## Architecture
 
-```
-session init ──▶ PermissionResolver ──▶ UserPolicy ──▶ PolicyGongClient (per session)
-                      │
-                      ├─ profile lookup (which profile is this user in, per workspace)
-                      ├─ manager-graph expansion (teamLeadIds → visible userIds)
-                      └─ org-wide cache, 1h TTL, background refresh
+```mermaid
+flowchart TD
+    A["User connects to /mcp<br/>(Google SSO, verified domain)"] --> B["Resolve Gong identity<br/>email → Gong userId"]
+    B --> M{"GONG_POLICY_MODE"}
+
+    M -->|"binary (default)"| BIN["ScopedGongClient<br/>Phase 2 admin / member"]
+    M -->|shadow| SH["ScopedGongClient enforces<br/>+ Proxy logs [policy] SHADOW diff<br/>where profile policy disagrees"]
+    M -->|profiles| BG{"Break-glass admin?<br/>(GONG_ADMIN_EMAILS)"}
+
+    BG -->|yes| PASS["Org-wide passthrough"]
+    BG -->|no| R["PermissionResolver"]
+
+    subgraph CACHE ["Org snapshot — cached 1h, stale-served ≤4h"]
+        direction LR
+        W["workspaces"] --> P["profiles per workspace"]
+        P --> PU["profile → member userIds"]
+        MG["manager graph<br/>(userId → managerId)"]
+    end
+
+    R <-.-> CACHE
+    R -->|resolved| UP["UserPolicy<br/>per-workspace domain access<br/>+ capability gates"]
+    R -->|"any failure — FAIL CLOSED"| DEG["[policy] DEGRADED<br/>Phase 2 member policy<br/>(own data only)"]
+
+    UP --> PC["PolicyGongClient (per session)"]
+    DEG --> PC
+
+    PC --> C1["calls / transcripts<br/>each call filtered by its own<br/>workspace's visible-user set"]
+    PC --> C2["stats / coaching<br/>userIds = requested ∩ visible<br/>empty ⇒ deny"]
+    PC --> C3["AI tools<br/>require callsAccess = all<br/>in the target workspace"]
+    PC --> C4["writes & admin surface<br/>capability gates: crmWrite,<br/>scheduleCalls, techAdmin"]
 ```
 
 ### 1. `src/gong/permissionResolver.ts` (new)
