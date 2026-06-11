@@ -20,9 +20,9 @@ export interface GatewayConfig {
   googleClientId: string;
   googleClientSecret: string;
   signingKey: string;
-  allowedEmails: Set<string>;  // lowercase
-  adminEmails: Set<string>;    // lowercase subset of allowedEmails with admin role
-  allowedDomain: string;       // e.g. "gonimbly.com"
+  allowedEmails: Set<string> | null; // lowercase; null = whole allowedDomain is allowed
+  adminEmails: Set<string>;          // lowercase emails with admin role
+  allowedDomain: string;             // e.g. "gonimbly.com"
 }
 
 export function loadGatewayConfig(): GatewayConfig {
@@ -32,12 +32,17 @@ export function loadGatewayConfig(): GatewayConfig {
     return v;
   };
 
-  const allowedEmailsRaw = required("GONG_ALLOWED_EMAILS");
-  const allowedEmails = new Set(
-    allowedEmailsRaw.split(",").map((e) => e.trim().toLowerCase()).filter(Boolean)
-  );
-  if (allowedEmails.size === 0) {
-    throw new Error("GONG_ALLOWED_EMAILS must contain at least one email (comma-separated).");
+  const allowedDomain = (process.env.GONG_ALLOWED_DOMAIN ?? "gonimbly.com").toLowerCase();
+
+  // Optional: when unset, every verified Google account on allowedDomain may sign in
+  // (safe because the policy layer scopes member data access). Set it to restrict
+  // sign-in to specific people, e.g. during a pilot.
+  const allowedEmailsRaw = process.env.GONG_ALLOWED_EMAILS?.trim();
+  const allowedEmails = allowedEmailsRaw
+    ? new Set(allowedEmailsRaw.split(",").map((e) => e.trim().toLowerCase()).filter(Boolean))
+    : null;
+  if (allowedEmails && allowedEmails.size === 0) {
+    throw new Error("GONG_ALLOWED_EMAILS is set but contains no emails — unset it to allow the whole domain.");
   }
 
   const adminEmails = new Set(
@@ -47,7 +52,10 @@ export function loadGatewayConfig(): GatewayConfig {
       .filter(Boolean)
   );
   for (const admin of adminEmails) {
-    if (!allowedEmails.has(admin)) {
+    if (!admin.endsWith(`@${allowedDomain}`)) {
+      throw new Error(`GONG_ADMIN_EMAILS contains ${admin}, which is not on ${allowedDomain}.`);
+    }
+    if (allowedEmails && !allowedEmails.has(admin)) {
       throw new Error(`GONG_ADMIN_EMAILS contains ${admin}, which is not in GONG_ALLOWED_EMAILS.`);
     }
   }
@@ -59,7 +67,7 @@ export function loadGatewayConfig(): GatewayConfig {
     signingKey: required("SESSION_SIGNING_KEY"),
     allowedEmails,
     adminEmails,
-    allowedDomain: (process.env.GONG_ALLOWED_DOMAIN ?? "gonimbly.com").toLowerCase(),
+    allowedDomain,
   };
 }
 
@@ -107,7 +115,8 @@ export class GoogleOAuthProvider implements OAuthServerProvider {
   private isAllowed(email: string): boolean {
     const lower = email.toLowerCase();
     const domain = lower.split("@")[1] ?? "";
-    return domain === this.config.allowedDomain && this.config.allowedEmails.has(lower);
+    if (domain !== this.config.allowedDomain) return false;
+    return this.config.allowedEmails === null || this.config.allowedEmails.has(lower);
   }
 
   private sweep(): void {
@@ -192,8 +201,8 @@ export class GoogleOAuthProvider implements OAuthServerProvider {
     if (!this.isAllowed(claims.email)) {
       console.error(`[gateway] Denied login for ${claims.email} (not on allowlist)`);
       return fail(403,
-        `${claims.email} is not authorized to use the Gong MCP pilot. ` +
-        `Ask the administrator to add you to the allowlist.`
+        `${claims.email} is not authorized to use the Gong MCP. ` +
+        `Sign in with your ${this.config.allowedDomain} account, or ask the administrator for access.`
       );
     }
 

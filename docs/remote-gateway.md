@@ -90,8 +90,8 @@ This is the server-side credential; it is never shared with users.
 | `BASE_URL` | Public URL of the service, no trailing slash |
 | `GOOGLE_OAUTH_CLIENT_ID` / `GOOGLE_OAUTH_CLIENT_SECRET` | From step 1 |
 | `SESSION_SIGNING_KEY` | Long random string (Render generates it via the blueprint) |
-| `GONG_ALLOWED_EMAILS` | Comma-separated allowlist of users who can sign in |
-| `GONG_ADMIN_EMAILS` | Comma-separated subset with org-wide access; everyone else is a member |
+| `GONG_ALLOWED_EMAILS` | Optional — unset means any verified `GONG_ALLOWED_DOMAIN` account can sign in (as a member). Set a comma-separated list to restrict sign-in, e.g. during a pilot |
+| `GONG_ADMIN_EMAILS` | Comma-separated admins with org-wide access; everyone else is a member |
 | `GONG_ALLOWED_DOMAIN` | Defaults to `gonimbly.com` |
 | `GONG_ACCESS_KEY` / `GONG_ACCESS_KEY_SECRET` | From step 2 |
 | `GONG_BASE_URL` | Your org's API endpoint as shown in Gong → Settings → API (e.g. `https://us-32447.api.gong.io`) — access keys are rejected on the generic `api.gong.io` |

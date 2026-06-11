@@ -48,11 +48,21 @@ describe("loadGatewayConfig", () => {
     assert.throws(() => loadGatewayConfig(), /not in GONG_ALLOWED_EMAILS/);
   });
 
-  test("requires the allowlist to be present and non-empty", () => {
+  test("rejects an admin outside the allowed domain", () => {
     delete process.env.GONG_ALLOWED_EMAILS;
-    assert.throws(() => loadGatewayConfig(), /GONG_ALLOWED_EMAILS/);
+    process.env.GONG_ADMIN_EMAILS = "admin@evil.com";
+    assert.throws(() => loadGatewayConfig(), /not on gonimbly.com/);
+  });
+
+  test("unset allowlist means the whole domain is allowed", () => {
+    delete process.env.GONG_ALLOWED_EMAILS;
+    const config = loadGatewayConfig();
+    assert.equal(config.allowedEmails, null);
+  });
+
+  test("an allowlist that is set but empty is a config error", () => {
     process.env.GONG_ALLOWED_EMAILS = " , ";
-    assert.throws(() => loadGatewayConfig(), /at least one email/);
+    assert.throws(() => loadGatewayConfig(), /unset it to allow the whole domain/);
   });
 
   test("strips trailing slash from BASE_URL", () => {
@@ -107,6 +117,15 @@ describe("exchangeRefreshToken", () => {
   test("refuses an access token used as a refresh token", async () => {
     const access = signJwt({ sub: "member@gonimbly.com", typ: "access", client_id: "c1" }, SIGNING_KEY, 600);
     await assert.rejects(provider.exchangeRefreshToken(CLIENT, access));
+  });
+
+  test("domain-wide mode: any domain user can refresh, outsiders cannot", async () => {
+    const domainWide = new GoogleOAuthProvider(makeConfig({ allowedEmails: null }));
+    const insider = signJwt({ sub: "anyone@gonimbly.com", typ: "refresh", client_id: "c1" }, SIGNING_KEY, 600);
+    const outsider = signJwt({ sub: "attacker@evil.com", typ: "refresh", client_id: "c1" }, SIGNING_KEY, 600);
+    const tokens = await domainWide.exchangeRefreshToken(CLIENT, insider);
+    assert.ok(tokens.access_token);
+    await assert.rejects(domainWide.exchangeRefreshToken(CLIENT, outsider), /no longer authorized/);
   });
 });
 
