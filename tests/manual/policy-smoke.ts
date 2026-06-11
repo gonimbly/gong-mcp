@@ -95,25 +95,55 @@ const range = {
   toDateTime: new Date().toISOString(),
 };
 
-const rawCalls = await raw.getExtensiveCalls({
+interface CallRecord {
+  metaData?: { id?: string; title?: string };
+  parties?: Array<{ userId?: string }>;
+}
+interface CallsPage {
+  calls?: CallRecord[];
+  records?: { totalRecords?: number; cursor?: string };
+}
+
+// The API pages at 100 records — follow the cursor so counts reflect the
+// full range, not just page 1. Capped to keep the smoke test quick.
+const MAX_PAGES = 10;
+async function allPages(fetchPage: (cursor?: string) => Promise<CallsPage>): Promise<{ calls: CallRecord[]; total: number }> {
+  const calls: CallRecord[] = [];
+  let cursor: string | undefined;
+  let total = 0;
+  for (let page = 0; page < MAX_PAGES; page++) {
+    const data = await fetchPage(cursor);
+    calls.push(...(data.calls ?? []));
+    total = data.records?.totalRecords ?? calls.length;
+    cursor = data.records?.cursor;
+    if (!cursor) break;
+  }
+  if (cursor) console.log(`  (stopped after ${MAX_PAGES} pages — ${total} total calls in range)`);
+  return { calls, total };
+}
+
+const { calls: rawList, total: rawTotal } = await allPages((cursor) => raw.getExtensiveCalls({
   filter: { ...range, workspaceId: CUSTOMERS },
   contentSelector: { exposedFields: { parties: true } },
-}) as { calls?: Array<{ metaData?: { id?: string; title?: string }; parties?: Array<{ userId?: string }> }> };
-const rawList = rawCalls.calls ?? [];
+  ...(cursor ? { cursor } : {}),
+}) as Promise<CallsPage>);
 
-const scopedCalls = await scoped.getExtensiveCalls({ filter: { ...range, workspaceId: CUSTOMERS } }) as { calls?: Array<{ metaData?: { id?: string } }> };
-const scopedIds = new Set((scopedCalls.calls ?? []).map((c) => String(c.metaData?.id)));
+const { calls: scopedList } = await allPages((cursor) => scoped.getExtensiveCalls({
+  filter: { ...range, workspaceId: CUSTOMERS },
+  ...(cursor ? { cursor } : {}),
+}) as Promise<CallsPage>);
+const scopedIds = new Set(scopedList.map((c) => String(c.metaData?.id)));
 
 const callsAccess = (policy.perWorkspace.get(CUSTOMERS) ?? policy.perWorkspace.get("*"))?.calls;
 const hiddenCalls = rawList.filter((c) => !scopedIds.has(String(c.metaData?.id)));
-console.log(`  raw org client: ${rawList.length} calls | policy client: ${scopedIds.size} calls | hidden: ${hiddenCalls.length}`);
+console.log(`  raw org client: ${rawList.length}/${rawTotal} calls in range | policy client: ${scopedIds.size} | hidden: ${hiddenCalls.length}`);
 
 if (callsAccess?.visibleUserIds === null) {
   check("calls: unrestricted profile sees everything", scopedIds.size === rawList.length,
     `${scopedIds.size}/${rawList.length} visible (callsAccess=all)`);
 } else if (callsAccess) {
   const visible = callsAccess.visibleUserIds!;
-  const wronglyShown = (scopedCalls.calls ?? []).filter((c) => {
+  const wronglyShown = scopedList.filter((c) => {
     const call = rawList.find((r) => String(r.metaData?.id) === String(c.metaData?.id));
     return call && !(call.parties ?? []).some((p) => p.userId && visible.has(String(p.userId)));
   });
