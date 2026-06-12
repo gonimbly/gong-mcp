@@ -1,3 +1,5 @@
+import { sendSlackAlert } from "../utils/alert.js";
+
 const DAILY_LIMIT = 50_000;
 const ALERT_THRESHOLD = 0.75;
 
@@ -42,18 +44,11 @@ class DailyQuotaTracker {
   }
 
   private sendAlert(): void {
-    const webhookUrl = process.env.ALERT_SLACK_WEBHOOK_URL;
     const pct = ((this.count / DAILY_LIMIT) * 100).toFixed(1);
-    const msg =
+    sendSlackAlert(
       `⚠️ Gong API quota at ${pct}% — ${this.count}/${DAILY_LIMIT} requests used today` +
-      ` (${this.date} UTC). Resets at midnight UTC.`;
-    console.error(`[quota] ALERT: ${msg}`);
-    if (!webhookUrl) return;
-    fetch(webhookUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text: msg }),
-    }).catch((err) => console.error("[quota] Slack alert failed:", err));
+      ` (${this.date} UTC). Resets at midnight UTC.`
+    );
   }
 }
 
