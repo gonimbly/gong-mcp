@@ -29,3 +29,33 @@ these checks now guard a production access model). It exists because live APIs
 disagree with fakes:
 on 2026-06-11 it caught `/v2/users/extensive` rejecting the bare `{}` body
 our unit-test fake accepted, which silently degraded every session.
+
+## find-calls-smoke.ts
+
+End-to-end verification of the call-discovery composite tools
+(`src/gong/discovery.ts`) through a real `PolicyGongClient`: directory
+resolution, participant search with an independent raw-fetch cross-check of a
+result, account search seeded from live data, `my_calls` self-containment,
+summary compactness, and a before/after token-cost comparison of the composite
+output vs paging the raw extensive endpoint.
+
+```bash
+npm run smoke:find-calls                                        # default persona + "Nikki Mitchell"
+npm run smoke:find-calls -- nikki.mitchell@gonimbly.com "Iulyan"
+```
+
+Run it after changing the discovery engine, and for at least one persona with
+restricted call visibility to confirm policy composition (coverage counts must
+satisfy matched ≤ scanned ≤ raw total).
+
+## extensive-filter-probe.ts
+
+One-shot probe of `/v2/calls/extensive` capabilities: `primaryUserIds` filter
+support, `contentSelector.context: "Extended"` CRM shape and coverage, party
+field shapes, deep-link presence, and missing/empty-filter strictness. Findings
+are recorded in `docs/backlog-call-discovery-tools.md` — re-run it before
+relying on a new request shape, and update that doc if Gong's behavior changes.
+
+```bash
+npm run probe:extensive-filter
+```

@@ -5,8 +5,9 @@ client Acme" one-tool-call questions. Today Claude struggles with these — it h
 orchestrate multi-page scans and client-side filtering itself, and usually gives up
 early or burns a lot of tokens.
 
-**Status:** specced, not started. Implement as a **follow-up PR** (do not extend
-PR #5, which is the Phase 3 access-control change).
+**Status:** implemented in PR #6 (2026-06-12) — `gong_find_calls`, `gong_my_calls`,
+`gong_find_user`, `gong_call_summary` in `src/tools/discovery.ts` on the engine in
+`src/gong/discovery.ts`. Live verification findings below.
 
 **Branch context:** specced on `iulyanvicari/phase3-access-control-plan`
 (2026-06-11). Assumes Phase 3 has merged: tools receive a policy-enforcing client,
@@ -110,6 +111,34 @@ Exists because Claude currently pulls full transcripts (enormous) just to answer
 contentSelector: … })` call with the content fields from the existing
 `gong_get_extensive_calls` registration, flattened to compact text. Policy:
 `getCall`/`getExtensiveCalls` overrides already gate per-call visibility.
+
+## Live verification findings (probed 2026-06-12, `npm run probe:extensive-filter`)
+
+Answers to the open questions above, verified against the live API with the
+keychain OAuth credential:
+
+1. **`filter.primaryUserIds` IS accepted and honored** — probing a rep who was
+   primary on calls in range returned exactly their calls (29/29 honored).
+   Deliberately NOT used by `gong_find_calls`: it only covers the *primary rep*,
+   so it can't answer participant questions, and mixing a pre-filtered scan with
+   a parties scan would make the coverage report dishonest. Candidate future
+   fast-path for `gong_my_calls` only.
+2. **`contentSelector.context: "Extended"` works** — 90/100 calls in a 14-day
+   range carried CRM context shaped
+   `[{ system: "Salesforce", objects: [{ objectType: "Account", objectId,
+   fields: [{ name, value }] }] }]` with `Name`, `Website`, `Domain__c` among
+   the fields. The CRM matching arm is therefore ENABLED in `gong_find_calls`;
+   the selector is only requested when `account` is given because it triples the
+   page weight (694 KB vs 195 KB parties-only).
+3. **`metaData.url`** (gong.app.gong.io deep link) is present on 100/100 calls —
+   compact results include it for free (open question 3: yes).
+4. **Strictness:** `/v2/calls/extensive` 400s on a bare `{}` body (same as
+   `/v2/users/extensive`, quirk 1 below) but ACCEPTS `{ "filter": {} }` and
+   returns an unbounded scan. Party `affiliation` values: `Internal`,
+   `External`, `Unknown`.
+5. **Scale baseline:** 766 calls in the last 14 days; a parties-only page is
+   ~195 KB of JSON. Manual paging through the model was never viable — that is
+   ~50k tokens per page before any filtering.
 
 ## Live API quirks (hard-won on 2026-06-11 — don't rediscover these)
 

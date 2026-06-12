@@ -16,6 +16,8 @@
     "setup": "tsx src/setup.ts",
     "test": "node --import tsx --test 'src/**/*.test.ts'",
     "smoke:policy": "tsx tests/manual/policy-smoke.ts",
+    "smoke:find-calls": "tsx tests/manual/find-calls-smoke.ts",
+    "probe:extensive-filter": "tsx tests/manual/extensive-filter-probe.ts",
     "postbuild": "chmod +x dist/index.js dist/setup.js",
     "prepare": "npm run build",
     "prepublishOnly": "npm run build"
