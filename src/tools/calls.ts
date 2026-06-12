@@ -5,7 +5,7 @@ import type { GongClient } from "../gong/client.js";
 export function registerCallTools(server: McpServer, client: GongClient) {
   server.tool(
     "gong_list_calls",
-    "List Gong calls (paginated). Returns call metadata: title, duration, participants, date, workspace. Use cursor for pagination.",
+    "List Gong calls (paginated). Returns call metadata: title, duration, participants, date, workspace. Use cursor for pagination. For questions about a specific person's or client's calls, use gong_find_calls instead.",
     {
       fromDateTime: z.string().optional().describe("ISO 8601 start date e.g. 2024-01-01T00:00:00Z"),
       toDateTime: z.string().optional().describe("ISO 8601 end date"),
@@ -44,7 +44,7 @@ export function registerCallTools(server: McpServer, client: GongClient) {
 
   server.tool(
     "gong_get_extensive_calls",
-    "Get calls with fully enriched content: topics, trackers, brief summary, key points, call outcome, next steps, speaker interaction stats, and questions. Use contentSelector to control which fields are returned.",
+    "Get calls with fully enriched content: topics, trackers, brief summary, key points, call outcome, next steps, speaker interaction stats, and questions. Use contentSelector to control which fields are returned. Responses are LARGE — for finding a person's or client's calls use gong_find_calls, and for a one-call digest use gong_call_summary instead.",
     {
       fromDateTime: z.string().optional().describe("ISO 8601 start date"),
       toDateTime: z.string().optional().describe("ISO 8601 end date"),

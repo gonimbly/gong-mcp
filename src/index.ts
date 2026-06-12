@@ -4,6 +4,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { GongClient } from "./gong/client.js";
 import { registerConfigureTool } from "./tools/configure.js";
 import { registerCallTools } from "./tools/calls.js";
+import { registerDiscoveryTools } from "./tools/discovery.js";
 import { registerUserTools } from "./tools/users.js";
 import { registerStatsTools } from "./tools/stats.js";
 import { registerEntityTools } from "./tools/entities.js";
@@ -24,6 +25,8 @@ registerConfigureTool(server);
 
 // All Gong tools — each will surface a clear error if credentials aren't set yet
 registerCallTools(server, client);
+// No resolved identity in stdio mode, so gong_my_calls is not registered here
+registerDiscoveryTools(server, client);
 registerUserTools(server, client);
 registerStatsTools(server, client);
 registerEntityTools(server, client);

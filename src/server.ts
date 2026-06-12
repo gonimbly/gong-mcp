@@ -21,6 +21,7 @@ import { PermissionResolver } from "./gong/permissionResolver.js";
 import { parsePolicyMode, buildSessionClient } from "./gong/sessionClient.js";
 import { resolveGongIdentity, type GongIdentity } from "./gong/identity.js";
 import { registerCallTools } from "./tools/calls.js";
+import { registerDiscoveryTools } from "./tools/discovery.js";
 import { registerUserTools } from "./tools/users.js";
 import { registerStatsTools } from "./tools/stats.js";
 import { registerEntityTools } from "./tools/entities.js";
@@ -100,6 +101,7 @@ function buildServer(identity: GongIdentity, client: GongClient, access: string)
   );
 
   registerCallTools(server, client);
+  registerDiscoveryTools(server, client, identity);
   registerUserTools(server, client);
   registerStatsTools(server, client);
   registerEntityTools(server, client);

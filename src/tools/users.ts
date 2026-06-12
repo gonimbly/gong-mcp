@@ -5,7 +5,7 @@ import type { GongClient } from "../gong/client.js";
 export function registerUserTools(server: McpServer, client: GongClient) {
   server.tool(
     "gong_list_users",
-    "List all Gong users in the workspace with name, email, title, manager, and active status.",
+    "List all Gong users in the workspace with name, email, title, manager, and active status. To resolve a name or email to a user, prefer gong_find_user.",
     {
       cursor: z.string().optional().describe("Pagination cursor"),
     },
