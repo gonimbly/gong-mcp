@@ -78,6 +78,18 @@ const extensive = await probe("gong_get_extensive_calls", () => raw.getExtensive
 const externalEmail = extensive?.calls
   ?.flatMap((c) => c.parties ?? [])
   .find((p) => p.affiliation === "External" && p.emailAddress)?.emailAddress;
+await probe("gong_get_extensive_calls (outline + highlights fields)", () => raw.getExtensiveCalls({
+  filter: { ...range },
+  contentSelector: { exposedFields: { content: { outline: true, highlights: true } } },
+}));
+if (callId) {
+  await probe("gong_library_folder_recap (callIds filter via extensive)", () => raw.getExtensiveCalls({
+    filter: { callIds: [callId] },
+    contentSelector: { exposedFields: { content: { brief: true, keyPoints: true } } },
+  }));
+} else {
+  rows.push({ tool: "gong_library_folder_recap (callIds filter via extensive)", verdict: "⚠️", detail: "no call id available to probe" });
+}
 await probe("gong_list_call_outcomes", () => raw.listCallOutcomes());
 
 // ── Users ─────────────────────────────────────────────────────────────────────
@@ -122,7 +134,19 @@ await probe("gong_generate_brief (no published template — expect 'Brief not fo
 const folders = await probe("gong_list_library_folders", () => raw.listLibraryFolders(ws)) as
   { folders?: Array<{ id?: string }> } | undefined;
 const folderId = folders?.folders?.[0]?.id ? String(folders.folders[0].id) : "1";
-await probe("gong_get_library_folder_content", () => raw.getLibraryFolderContent(folderId));
+const folderContent = await probe("gong_get_library_folder_content", () => raw.getLibraryFolderContent(folderId)) as
+  { calls?: Array<{ id: string }> } | undefined;
+
+// gong_library_folder_recap: verify folder content returns call ids (step 1 of the composite tool)
+const folderCallIds = (folderContent?.calls ?? []).map((c) => c.id);
+if (folderCallIds.length > 0) {
+  await probe("gong_library_folder_recap (folder → extensive)", () => raw.getExtensiveCalls({
+    filter: { callIds: folderCallIds.slice(0, 5) },
+    contentSelector: { exposedFields: { content: { brief: true, keyPoints: true } } },
+  }));
+} else {
+  rows.push({ tool: "gong_library_folder_recap (folder → extensive)", verdict: "⚠️", detail: `first folder (${folderId}) has no calls — shape still verified via callIds probe in calls section` });
+}
 
 // ── CRM (reads only; this org has no generic-CRM API integration, so the tool
 //    layer returns an instructive error before any API call — probe the API

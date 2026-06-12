@@ -39,4 +39,39 @@ export function registerLibraryTools(server: McpServer, client: GongClient) {
       return { content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] };
     }
   );
+
+  server.tool(
+    "gong_library_folder_recap",
+    "Get a recap of all calls in a Gong library folder in one shot: fetches the folder's call list then enriches each call via calls/extensive. Implements the 'library → batch extensive' pipeline pattern. Use gong_list_library_folders to find folder IDs.",
+    {
+      folderId: z.string().describe("Library folder ID (from gong_list_library_folders)"),
+      includeBrief: z.boolean().optional().default(true).describe("Include AI-generated brief"),
+      includeKeyPoints: z.boolean().optional().default(true).describe("Include key points"),
+      includeOutline: z.boolean().optional().default(false).describe("Include structured call outline"),
+      includeNextSteps: z.boolean().optional().default(false).describe("Include next steps"),
+      includeTopics: z.boolean().optional().default(false).describe("Include topics discussed"),
+    },
+    async (args) => {
+      const folder = await client.getLibraryFolderContent(args.folderId) as { calls?: { id: string }[] };
+      const callIds = (folder.calls ?? []).map((c) => c.id);
+      if (callIds.length === 0) {
+        return { content: [{ type: "text" as const, text: JSON.stringify({ folderId: args.folderId, calls: [] }) }] };
+      }
+      const data = await client.getExtensiveCalls({
+        filter: { callIds },
+        contentSelector: {
+          exposedFields: {
+            content: {
+              brief: args.includeBrief,
+              keyPoints: args.includeKeyPoints,
+              outline: args.includeOutline,
+              nextSteps: args.includeNextSteps,
+              topics: args.includeTopics,
+            },
+          },
+        },
+      });
+      return { content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] };
+    }
+  );
 }
