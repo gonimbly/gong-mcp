@@ -61,7 +61,8 @@ const gongClient = new GongClient();
 type PolicyMode = "binary" | "shadow" | "profiles";
 
 const policyMode: PolicyMode = (() => {
-  const raw = process.env.GONG_POLICY_MODE ?? "binary";
+  // `||` not `??`: an env var saved as an empty string must mean the default, not a boot failure
+  const raw = process.env.GONG_POLICY_MODE || "binary";
   if (raw === "binary" || raw === "shadow" || raw === "profiles") return raw;
   throw new Error(`Invalid GONG_POLICY_MODE "${raw}" — expected binary | shadow | profiles`);
 })();
