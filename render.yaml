@@ -32,9 +32,9 @@ services:
         sync: false
       - key: GONG_BASE_URL       # org-specific API endpoint, shown in Gong → Settings → API
         value: https://us-32447.api.gong.io
-      # Phase 3 rollout dial — managed in the dashboard, not pinned here, so a
-      # blueprint sync never reverts the rollout state. binary (default when
-      # unset/empty) → shadow (soak) → profiles. See docs/remote-gateway.md
-      # "Rollout runbook".
+      # Access-model dial — managed in the dashboard, not pinned here, so a
+      # blueprint sync never reverts it. profiles (default when unset/empty);
+      # set binary explicitly to roll back to the Phase 2 admin/member model.
+      # See docs/remote-gateway.md "Rollout status & rollback".
       - key: GONG_POLICY_MODE
         sync: false

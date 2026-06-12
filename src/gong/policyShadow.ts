@@ -4,8 +4,9 @@
  * Enforcement stays on the Phase 2 binary client; this wrapper additionally
  * evaluates what the profile-based policy WOULD have decided for every gated
  * method and logs `[policy] SHADOW diff …` whenever the two models disagree.
- * Zero behavioral impact, no extra Gong API calls — the goal is a week of
- * production traffic with no unexplained diffs before flipping to `profiles`.
+ * Zero behavioral impact, no extra Gong API calls — a diagnostic for comparing
+ * the two models on live traffic, e.g. while deciding whether a `binary`
+ * rollback can be lifted back to `profiles`.
  */
 import type { GongClient } from "./client.js";
 import type { ScopedGongClient, GatewayRole } from "./scopedClient.js";

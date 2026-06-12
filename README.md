@@ -6,7 +6,7 @@ A Model Context Protocol server for the [Gong REST API](https://gong.app.gong.io
 
 Two ways to run it:
 
-- **Hosted gateway (recommended for teams)** — a deployed web service with Google SSO and per-user data access control. By default members only see their own calls and stats; with `GONG_POLICY_MODE=profiles` the gateway mirrors each user's actual Gong permission profile (team-scoped calls, manager stats, capability-gated writes — see [docs/phase3-access-control-plan.md](docs/phase3-access-control-plan.md)). No local install; users just add a connector URL in Claude. See [docs/remote-gateway.md](docs/remote-gateway.md).
+- **Hosted gateway (recommended for teams)** — a deployed web service with Google SSO and per-user data access control. By default the gateway mirrors each user's actual Gong permission profile (team-scoped calls, manager stats, capability-gated writes — see [docs/phase3-access-control-plan.md](docs/phase3-access-control-plan.md)); `GONG_POLICY_MODE=binary` falls back to a coarser admin/member model. No local install; users just add a connector URL in Claude. See [docs/remote-gateway.md](docs/remote-gateway.md).
 - **Local install (below)** — runs on your machine via stdio, authenticating with a Gong OAuth app. Full org access for whoever holds the credential.
 
 ---

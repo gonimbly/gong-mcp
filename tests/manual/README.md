@@ -23,8 +23,9 @@ npm run smoke:policy -- caio.pereira@gonimbly.com
 Credentials: either `GONG_ACCESS_KEY`/`GONG_ACCESS_KEY_SECRET`/`GONG_BASE_URL`
 env vars, or a keychain OAuth token from a prior `gong_login` (local dev).
 
-Run it for each persona in `docs/phase3a-discovery.md` before flipping
-`GONG_POLICY_MODE=profiles` (phase 3e), and again whenever the resolver or
-policy client changes. It exists because live APIs disagree with fakes:
+Run it for each persona in `docs/phase3a-discovery.md` whenever the resolver
+or policy client changes (`profiles` is the live default since 2026-06-12, so
+these checks now guard a production access model). It exists because live APIs
+disagree with fakes:
 on 2026-06-11 it caught `/v2/users/extensive` rejecting the bare `{}` body
 our unit-test fake accepted, which silently degraded every session.

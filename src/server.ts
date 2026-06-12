@@ -55,14 +55,14 @@ const provider = new GoogleOAuthProvider(config);
 const gongClient = new GongClient();
 
 // ── Policy mode (Phase 3) ─────────────────────────────────────────────────────
-//  binary   — Phase 2 admin/member model (default)
+//  profiles — enforce the user's Gong permission profile (default)
+//  binary   — Phase 2 admin/member model (rollback path — set explicitly)
 //  shadow   — enforce binary, log every place the profile-based policy disagrees
-//  profiles — enforce the user's Gong permission profile
 type PolicyMode = "binary" | "shadow" | "profiles";
 
 const policyMode: PolicyMode = (() => {
   // `||` not `??`: an env var saved as an empty string must mean the default, not a boot failure
-  const raw = process.env.GONG_POLICY_MODE || "binary";
+  const raw = process.env.GONG_POLICY_MODE || "profiles";
   if (raw === "binary" || raw === "shadow" || raw === "profiles") return raw;
   throw new Error(`Invalid GONG_POLICY_MODE "${raw}" — expected binary | shadow | profiles`);
 })();
