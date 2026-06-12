@@ -48,6 +48,18 @@ Run it after changing the discovery engine, and for at least one persona with
 restricted call visibility to confirm policy composition (coverage counts must
 satisfy matched ≤ scanned ≤ raw total).
 
+## stats-coaching-probe.ts
+
+One-shot probe of the stats + coaching endpoints, written when production
+surfaced permanent 400s on 2026-06-12: date-only vs datetime expectations per
+endpoint, the top-level `aggregationPeriod` field, and `/v2/coaching`'s
+kebab-case `workspace-id`/`manager-id`/`from`/`to` contract. Re-run before
+changing any stats/coaching request shape.
+
+```bash
+npm run probe:stats-coaching
+```
+
 ## extensive-filter-probe.ts
 
 One-shot probe of `/v2/calls/extensive` capabilities: `primaryUserIds` filter

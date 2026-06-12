@@ -140,10 +140,11 @@ describe("self-scoped stats", () => {
     }
   });
 
-  test("member coaching is forced to their own userId", async () => {
-    await member.getCoaching({ userId: "111" });
-    assert.ok(requests[0].url.includes("userId=222"));
-    assert.ok(!requests[0].url.includes("userId=111"));
+  test("member coaching is forced to their own manager view", async () => {
+    await member.getCoaching({ workspaceId: "w1", managerId: "111", from: "2026-05-01T00:00:00Z", to: "2026-05-31T00:00:00Z" });
+    assert.ok(requests[0].url.includes("manager-id=222"));
+    assert.ok(!requests[0].url.includes("manager-id=111"));
+    assert.ok(requests[0].url.includes("workspace-id=w1"));
   });
 });
 

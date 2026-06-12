@@ -208,13 +208,15 @@ describe("stats scoping", () => {
     assert.deepEqual(requests[0].body.filter.userIds, ["222"]);
   });
 
-  test("coaching: visible teammate allowed, stranger denied, default self", async () => {
-    await manager.getCoaching({ userId: "300" });
-    assert.ok(requests[0].url.includes("userId=300"));
-    await assert.rejects(async () => manager.getCoaching({ userId: "999" }), AccessDeniedError);
+  test("coaching: visible manager allowed, stranger denied, default self", async () => {
+    const range = { from: "2026-05-01T00:00:00Z", to: "2026-05-31T00:00:00Z" };
+    await manager.getCoaching({ workspaceId: WS1, managerId: "300", ...range });
+    assert.ok(requests[0].url.includes("manager-id=300"));
+    assert.ok(requests[0].url.includes("workspace-id=ws-customers"));
+    await assert.rejects(async () => manager.getCoaching({ workspaceId: WS1, managerId: "999", ...range }), AccessDeniedError);
     requests = [];
-    await manager.getCoaching({});
-    assert.ok(requests[0].url.includes("userId=222"));
+    await manager.getCoaching({ workspaceId: WS1, ...range });
+    assert.ok(requests[0].url.includes("manager-id=222"), "omitted managerId defaults to self");
   });
 });
 

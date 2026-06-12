@@ -148,6 +148,15 @@ keychain OAuth credential:
    the live API** (`npm run smoke:policy` pattern, keychain OAuth or org keys).
 2. Stats endpoints want `filter.fromDate`/`toDate` (date-only), while call
    endpoints want `fromDateTime`/`toDateTime` (ISO). Don't mix them up.
+   (This bit production on 2026-06-12: the stats tools were sending
+   `filter.fromDateTime` and could never succeed. Probed and fixed —
+   `npm run probe:stats-coaching`. More shapes pinned the same day:
+   `/v2/stats/activity/aggregate-by-period` takes `aggregationPeriod` as a
+   TOP-LEVEL body field, sibling of `filter`, UPPERCASE `DAY|WEEK|MONTH|QUARTER`
+   — wrong values surface as "Json parse error". `GET /v2/coaching` requires
+   kebab-case `workspace-id` + `manager-id` query params and `from`/`to` as ISO
+   OffsetDateTime — date-only is rejected there, the opposite of stats. Coaching
+   data is manager-centric: an IC gets an empty `coachingData`, not an error.)
 3. Stats endpoints **404** when none of the requested userIds have stats data —
    handle as "no data", not as an error.
 4. Pagination: 100 records/page, `records.totalRecords` + `records.cursor`;

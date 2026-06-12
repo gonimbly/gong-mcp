@@ -226,7 +226,7 @@ export class PolicyGongClient extends GongClient {
     return super.getActivityAggregate(this.scopeStats(body));
   }
 
-  override getActivityAggregateByPeriod(body: { filter: Record<string, unknown> }) {
+  override getActivityAggregateByPeriod(body: { filter: Record<string, unknown>; aggregationPeriod?: string }) {
     return super.getActivityAggregateByPeriod(this.scopeStats(body));
   }
 
@@ -242,14 +242,16 @@ export class PolicyGongClient extends GongClient {
     return super.getInteractionStats(this.scopeStats(body));
   }
 
-  override getCoaching(params?: { fromDateTime?: string; toDateTime?: string; userId?: string }) {
-    const access = this.access("coaching");
+  override getCoaching(params: Parameters<GongClient["getCoaching"]>[0]) {
+    const access = this.access("coaching", params.workspaceId);
     if (access.visibleUserIds === null) return super.getCoaching(params);
-    const target = params?.userId ?? this.identity.userId;
+    // Coaching is manager-centric: the target manager must be within the
+    // profile's coaching visibility.
+    const target = params.managerId ?? this.identity.userId;
     if (!access.visibleUserIds.has(String(target))) {
-      this.deny(`coaching data for user ${target}`, "They are outside your profile's visibility.");
+      this.deny(`coaching data for manager ${target}`, "They are outside your profile's visibility.");
     }
-    return super.getCoaching({ ...params, userId: target });
+    return super.getCoaching({ ...params, managerId: target });
   }
 
   // ── AI synthesis: requires org-wide call access in the target workspace ────

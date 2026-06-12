@@ -165,7 +165,9 @@ export class GongClient {
     return this.request("/v2/stats/activity/aggregate", { method: "POST", body: JSON.stringify(body) });
   }
 
-  getActivityAggregateByPeriod(body: { filter: Record<string, unknown> }) {
+  // aggregationPeriod is a TOP-LEVEL body field (sibling of filter) with
+  // uppercase values: DAY | WEEK | MONTH | QUARTER (verified live 2026-06-12).
+  getActivityAggregateByPeriod(body: { filter: Record<string, unknown>; aggregationPeriod?: string }) {
     return this.request("/v2/stats/activity/aggregate-by-period", { method: "POST", body: JSON.stringify(body) });
   }
 
@@ -421,8 +423,17 @@ export class GongClient {
 
   // ── Coaching & Outcomes ──────────────────────────────────────────────────
 
-  getCoaching(params?: { fromDateTime?: string; toDateTime?: string; userId?: string }) {
-    return this.request(`/v2/coaching${this.qs(params ?? {})}`);
+  /** Coaching metrics are manager-centric. The API requires kebab-case query
+   * params — workspace-id, manager-id — and an ISO OffsetDateTime range
+   * (verified live 2026-06-12; date-only values are rejected here, unlike the
+   * stats endpoints). */
+  getCoaching(params: { workspaceId: string; managerId?: string; from: string; to: string }) {
+    return this.request(`/v2/coaching${this.qs({
+      "workspace-id": params.workspaceId,
+      "manager-id": params.managerId,
+      from: params.from,
+      to: params.to,
+    })}`);
   }
 
   listCallOutcomes() {

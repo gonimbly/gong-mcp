@@ -105,7 +105,7 @@ function buildServer(identity: GongIdentity, client: GongClient, access: string)
   registerUserTools(server, client);
   registerStatsTools(server, client);
   registerEntityTools(server, client);
-  registerSettingsTools(server, client);
+  registerSettingsTools(server, client, identity);
   registerLibraryTools(server, client);
   registerCrmTools(server, client);
   registerFlowTools(server, client);
