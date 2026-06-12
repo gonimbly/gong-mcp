@@ -1,0 +1,222 @@
+[
+  {
+    "id": "7274863720785101152",
+    "name": "Business Admin",
+    "callsAccess": { "permissionLevel": "all", "teamLeadIds": null },
+    "dealsAccess": { "permissionLevel": "all", "teamLeadIds": null },
+    "coachingAccess": { "permissionLevel": "all", "teamLeadIds": null },
+    "insightsAccess": { "permissionLevel": "all", "teamLeadIds": null },
+    "usageAccess": { "permissionLevel": "all", "teamLeadIds": null },
+    "emailsAccess": { "permissionLevel": "all", "teamLeadIds": null },
+    "libraryFolderAccess": { "permissionLevel": "all", "libraryFolderIds": null },
+    "downloadCallMedia": true,
+    "privateCalls": true,
+    "manageScorecards": true,
+    "crmDataImport": true,
+    "crmDataInlineEditing": true,
+    "aiBuilder": true,
+    "manageGeneralBusinessSettings": true,
+    "manuallyScheduleAndUploadCalls": true
+  },
+  {
+    "id": "1680161525702087704",
+    "name": "Collaborator",
+    "callsAccess": {
+      "permissionLevel": "report-to-them",
+      "teamLeadIds": ["8319711599868458358", "8235508109267676138", "2701822690086447503"]
+    },
+    "dealsAccess": { "permissionLevel": "none", "teamLeadIds": null },
+    "coachingAccess": { "permissionLevel": "none", "teamLeadIds": null },
+    "insightsAccess": { "permissionLevel": "none", "teamLeadIds": null },
+    "usageAccess": { "permissionLevel": "none", "teamLeadIds": null },
+    "emailsAccess": { "permissionLevel": "report-to-them", "teamLeadIds": null },
+    "libraryFolderAccess": { "permissionLevel": "all", "libraryFolderIds": null },
+    "downloadCallMedia": false,
+    "privateCalls": false,
+    "manageScorecards": false,
+    "crmDataImport": false,
+    "crmDataInlineEditing": false,
+    "aiBuilder": false,
+    "manageGeneralBusinessSettings": false,
+    "manuallyScheduleAndUploadCalls": false
+  },
+  {
+    "id": "1214357800796664248",
+    "name": "Delivery Manager+",
+    "callsAccess": {
+      "permissionLevel": "all",
+      "teamLeadIds": ["8319711599868458358", "8235508109267676138", "2701822690086447503", "6434304684007139807"]
+    },
+    "dealsAccess": { "permissionLevel": "all", "teamLeadIds": null },
+    "coachingAccess": { "permissionLevel": "report-to-them", "teamLeadIds": null },
+    "insightsAccess": { "permissionLevel": "report-to-them", "teamLeadIds": null },
+    "usageAccess": { "permissionLevel": "none", "teamLeadIds": null },
+    "emailsAccess": { "permissionLevel": "all", "teamLeadIds": null },
+    "libraryFolderAccess": { "permissionLevel": "all", "libraryFolderIds": null },
+    "downloadCallMedia": true,
+    "privateCalls": true,
+    "manageScorecards": true,
+    "crmDataImport": true,
+    "crmDataInlineEditing": true,
+    "aiBuilder": true,
+    "manageGeneralBusinessSettings": true,
+    "manuallyScheduleAndUploadCalls": true
+  },
+  {
+    "id": "2640638129534878558",
+    "name": "Delivery Team Member",
+    "callsAccess": {
+      "permissionLevel": "managers-team",
+      "teamLeadIds": ["2935925063502711360", "8319711599868458358", "2701822690086447503", "8235508109267676138", "6434304684007139807"]
+    },
+    "dealsAccess": { "permissionLevel": "report-to-them", "teamLeadIds": null },
+    "coachingAccess": { "permissionLevel": "report-to-them", "teamLeadIds": null },
+    "insightsAccess": { "permissionLevel": "report-to-them", "teamLeadIds": null },
+    "usageAccess": { "permissionLevel": "none", "teamLeadIds": null },
+    "emailsAccess": { "permissionLevel": "report-to-them", "teamLeadIds": null },
+    "libraryFolderAccess": { "permissionLevel": "all", "libraryFolderIds": null },
+    "downloadCallMedia": true,
+    "privateCalls": true,
+    "manageScorecards": false,
+    "crmDataImport": false,
+    "crmDataInlineEditing": false,
+    "aiBuilder": true,
+    "manageGeneralBusinessSettings": false,
+    "manuallyScheduleAndUploadCalls": true
+  },
+  {
+    "id": "1115036782021909717",
+    "name": "Executive",
+    "callsAccess": { "permissionLevel": "all", "teamLeadIds": null },
+    "dealsAccess": { "permissionLevel": "all", "teamLeadIds": null },
+    "coachingAccess": { "permissionLevel": "all", "teamLeadIds": null },
+    "insightsAccess": { "permissionLevel": "all", "teamLeadIds": null },
+    "usageAccess": { "permissionLevel": "all", "teamLeadIds": null },
+    "emailsAccess": { "permissionLevel": "all", "teamLeadIds": null },
+    "libraryFolderAccess": { "permissionLevel": "all", "libraryFolderIds": null },
+    "downloadCallMedia": true,
+    "privateCalls": true,
+    "manageScorecards": true,
+    "crmDataImport": true,
+    "crmDataInlineEditing": true,
+    "aiBuilder": true,
+    "manageGeneralBusinessSettings": true,
+    "manuallyScheduleAndUploadCalls": true
+  },
+  {
+    "id": "2355824920741655074",
+    "name": "Gong Team Admins",
+    "callsAccess": {
+      "permissionLevel": "managers-team",
+      "teamLeadIds": ["2935925063502711360", "5570879772301582298", "8319711599868458358", "2701822690086447503", "8235508109267676138", "6434304684007139807"]
+    },
+    "dealsAccess": { "permissionLevel": "all", "teamLeadIds": null },
+    "coachingAccess": { "permissionLevel": "report-to-them", "teamLeadIds": null },
+    "insightsAccess": {
+      "permissionLevel": "managers-team",
+      "teamLeadIds": ["7118734369368411432", "5570879772301582298", "8319711599868458358"]
+    },
+    "usageAccess": { "permissionLevel": "none", "teamLeadIds": null },
+    "emailsAccess": {
+      "permissionLevel": "managers-team",
+      "teamLeadIds": ["5570879772301582298", "8319711599868458358"]
+    },
+    "libraryFolderAccess": { "permissionLevel": "all", "libraryFolderIds": null },
+    "downloadCallMedia": true,
+    "privateCalls": true,
+    "manageScorecards": true,
+    "crmDataImport": false,
+    "crmDataInlineEditing": true,
+    "aiBuilder": true,
+    "manageGeneralBusinessSettings": true,
+    "manuallyScheduleAndUploadCalls": true
+  },
+  {
+    "id": "3032255214765586447",
+    "name": "Gong Team Member",
+    "callsAccess": {
+      "permissionLevel": "managers-team",
+      "teamLeadIds": ["2935925063502711360", "5570879772301582298", "8319711599868458358", "2701822690086447503", "8235508109267676138", "6434304684007139807"]
+    },
+    "dealsAccess": { "permissionLevel": "all", "teamLeadIds": null },
+    "coachingAccess": { "permissionLevel": "report-to-them", "teamLeadIds": null },
+    "insightsAccess": { "permissionLevel": "managers-team", "teamLeadIds": null },
+    "usageAccess": { "permissionLevel": "none", "teamLeadIds": null },
+    "emailsAccess": {
+      "permissionLevel": "report-to-them",
+      "teamLeadIds": ["5570879772301582298", "8319711599868458358"]
+    },
+    "libraryFolderAccess": { "permissionLevel": "all", "libraryFolderIds": null },
+    "downloadCallMedia": true,
+    "privateCalls": true,
+    "manageScorecards": true,
+    "crmDataImport": false,
+    "crmDataInlineEditing": true,
+    "aiBuilder": true,
+    "manageGeneralBusinessSettings": true,
+    "manuallyScheduleAndUploadCalls": true
+  },
+  {
+    "id": "6972101329065929841",
+    "name": "Integration User ",
+    "callsAccess": {
+      "permissionLevel": "none",
+      "teamLeadIds": ["6290422764671341526", "8010150837431336800", "7704151575475597733", "1663434000458882172"]
+    },
+    "dealsAccess": { "permissionLevel": "none", "teamLeadIds": null },
+    "coachingAccess": { "permissionLevel": "none", "teamLeadIds": null },
+    "insightsAccess": { "permissionLevel": "none", "teamLeadIds": null },
+    "usageAccess": { "permissionLevel": "none", "teamLeadIds": null },
+    "emailsAccess": { "permissionLevel": "none", "teamLeadIds": null },
+    "libraryFolderAccess": { "permissionLevel": "none", "libraryFolderIds": null },
+    "downloadCallMedia": false,
+    "privateCalls": false,
+    "manageScorecards": false,
+    "crmDataImport": false,
+    "crmDataInlineEditing": false,
+    "aiBuilder": false,
+    "manageGeneralBusinessSettings": false,
+    "manuallyScheduleAndUploadCalls": false
+  },
+  {
+    "id": "7661179544609917121",
+    "name": "Restricted",
+    "callsAccess": { "permissionLevel": "none", "teamLeadIds": null },
+    "dealsAccess": { "permissionLevel": "none", "teamLeadIds": null },
+    "coachingAccess": { "permissionLevel": "none", "teamLeadIds": null },
+    "insightsAccess": { "permissionLevel": "none", "teamLeadIds": null },
+    "usageAccess": { "permissionLevel": "none", "teamLeadIds": null },
+    "emailsAccess": { "permissionLevel": "none", "teamLeadIds": null },
+    "libraryFolderAccess": { "permissionLevel": "none", "libraryFolderIds": null },
+    "downloadCallMedia": false,
+    "privateCalls": false,
+    "manageScorecards": false,
+    "crmDataImport": false,
+    "crmDataInlineEditing": false,
+    "aiBuilder": false,
+    "manageGeneralBusinessSettings": false,
+    "manuallyScheduleAndUploadCalls": false
+  },
+  {
+    "id": "327522402872909474",
+    "name": "TEST",
+    "callsAccess": {
+      "permissionLevel": "managers-team",
+      "teamLeadIds": ["2935925063502711360", "8319711599868458358", "2701822690086447503", "8235508109267676138", "6434304684007139807"]
+    },
+    "dealsAccess": { "permissionLevel": "report-to-them", "teamLeadIds": null },
+    "coachingAccess": { "permissionLevel": "report-to-them", "teamLeadIds": null },
+    "insightsAccess": { "permissionLevel": "report-to-them", "teamLeadIds": null },
+    "usageAccess": { "permissionLevel": "none", "teamLeadIds": null },
+    "emailsAccess": { "permissionLevel": "report-to-them", "teamLeadIds": null },
+    "libraryFolderAccess": { "permissionLevel": "all", "libraryFolderIds": null },
+    "downloadCallMedia": true,
+    "privateCalls": false,
+    "manageScorecards": false,
+    "crmDataImport": false,
+    "crmDataInlineEditing": false,
+    "aiBuilder": true,
+    "manageGeneralBusinessSettings": false,
+    "manuallyScheduleAndUploadCalls": true
+  }
+]

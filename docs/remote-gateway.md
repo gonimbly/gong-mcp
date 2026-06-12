@@ -17,6 +17,16 @@ each user can see.
 
 ## Access model
 
+The gateway has two access models, selected by `GONG_POLICY_MODE`:
+
+- **`binary`** (default) — the Phase 2 admin/member model below
+- **`profiles`** — Phase 3: each user gets the same data access as in the Gong UI,
+  driven by their actual Gong permission profile
+- **`shadow`** — enforces `binary` while logging every decision the profile-based
+  policy would change (`[policy] SHADOW diff …`); use it to validate before flipping
+
+### `binary` mode (Phase 2)
+
 Every user is either a **member** or an **admin** (`GONG_ADMIN_EMAILS`). Admins get
 org-wide passthrough. For members, every tool call goes through a policy layer
 (`src/gong/scopedClient.ts`) bound to their Gong identity:
@@ -31,6 +41,38 @@ org-wide passthrough. For members, every tool call goes through a policy layer
 Denials are logged server-side (`[policy] DENY …`) for auditability. Member call
 listings are filtered per page, so a page may contain fewer items than the page
 size — clients should keep paginating with the returned cursor.
+
+### `profiles` mode (Phase 3)
+
+Every session resolves the user's Gong permission profile (cached org-wide for 1h)
+into a per-workspace policy — see `docs/phase3-access-control-plan.md` for the full
+design and `docs/phase3a-discovery.md` for the org's live profile data:
+
+| Surface | Behavior |
+|---|---|
+| Calls / transcripts | Each call is visible iff a party is in the user's visible set for that call's workspace (`all` / `managers-team` / `report-to-them` / `none`, expanded through the manager graph) |
+| Stats / coaching | Requested `userIds` are intersected with the visible set; a manager gets their team, an IC gets themself |
+| AI Q&A / briefs | Require unrestricted call access in the target workspace |
+| Deals / CRM / library / writes / admin tools | Gated on the profile's access levels and capability booleans (`crmDataImport`, `manuallyScheduleAndUploadCalls`, `manageGeneralBusinessSettings`, …) |
+
+**Fail closed:** if the profile cannot be resolved (API failure, user in no
+profile), the session degrades to the member policy above — own data only — and
+logs `[policy] DEGRADED`. `GONG_ADMIN_EMAILS` remains a break-glass org-wide
+override in this mode.
+
+### Rollout runbook (binary → profiles)
+
+1. Deploy with `GONG_POLICY_MODE=shadow` (no user impact). Soak ~1 week.
+2. Review the logs: every `[policy] SHADOW diff` line is a place the two models
+   disagree. Expected diffs: managers gaining team visibility, capability-gated
+   writes opening up, AI tools opening for all-calls profiles. Investigate any
+   diff you can't explain before proceeding.
+3. Verify personas live: `npm run smoke:policy -- <email>` (see
+   `tests/manual/README.md`) for at least one user per permission profile.
+4. Flip `GONG_POLICY_MODE=profiles`. Re-run the persona checks; spot-check the
+   Gong UI against MCP results for a scoped persona.
+5. Rollback at any point = set the mode back to `binary` (no data migration;
+   sessions pick it up on next connect).
 
 ## How authentication works
 
@@ -92,7 +134,8 @@ This is the server-side credential; it is never shared with users.
 | `GOOGLE_OAUTH_CLIENT_ID` / `GOOGLE_OAUTH_CLIENT_SECRET` | From step 1 |
 | `SESSION_SIGNING_KEY` | Long random string (Render generates it via the blueprint) |
 | `GONG_ALLOWED_EMAILS` | Optional — unset means any verified `GONG_ALLOWED_DOMAIN` account can sign in (as a member). Set a comma-separated list to restrict sign-in, e.g. during a pilot |
-| `GONG_ADMIN_EMAILS` | Comma-separated admins with org-wide access; everyone else is a member |
+| `GONG_ADMIN_EMAILS` | Comma-separated admins with org-wide access; everyone else is a member (break-glass override in `profiles` mode) |
+| `GONG_POLICY_MODE` | Optional — `binary` (default), `shadow`, or `profiles`; see "Access model" above |
 | `GONG_ALLOWED_DOMAIN` | Defaults to `gonimbly.com` |
 | `GONG_ACCESS_KEY` / `GONG_ACCESS_KEY_SECRET` | From step 2 |
 | `GONG_BASE_URL` | Your org's API endpoint as shown in Gong → Settings → API (e.g. `https://us-32447.api.gong.io`) — access keys are rejected on the generic `api.gong.io` |

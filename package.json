@@ -15,6 +15,7 @@
     "start:http": "node dist/server.js",
     "setup": "tsx src/setup.ts",
     "test": "node --import tsx --test 'src/**/*.test.ts'",
+    "smoke:policy": "tsx tests/manual/policy-smoke.ts",
     "postbuild": "chmod +x dist/index.js dist/setup.js",
     "prepare": "npm run build",
     "prepublishOnly": "npm run build"
