@@ -218,9 +218,13 @@ const statsAccess = (policy.perWorkspace.get(CUSTOMERS) ?? policy.perWorkspace.g
   ?? { level: "none" as const, visibleUserIds: new Set([identity.userId]) };
 if (statsAccess.visibleUserIds !== null) {
   const visible = statsAccess.visibleUserIds;
+  // Stats endpoints take date-only values and reject anything past "today" in the
+  // org's timezone. Slicing the UTC timestamp produced tomorrow's date during PT
+  // evenings, so end the range at yesterday — valid in every timezone.
+  const day = 86400_000;
   const dateRange = {
-    fromDate: range.fromDateTime.slice(0, 10),
-    toDate: range.toDateTime.slice(0, 10),
+    fromDate: new Date(Date.now() - 14 * day).toISOString().slice(0, 10),
+    toDate: new Date(Date.now() - day).toISOString().slice(0, 10),
   };
   const outside = visible.has(OUT_OF_POLICY_PROBE) ? null : OUT_OF_POLICY_PROBE;
   if (outside) {
