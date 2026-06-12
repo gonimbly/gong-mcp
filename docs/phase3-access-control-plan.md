@@ -6,8 +6,10 @@ admin/member model.
 
 **Status:** 3a–3c implemented (`permissionResolver.ts`, `policyClient.ts`, `policyShadow.ts`,
 `GONG_POLICY_MODE` switch — see [phase3a-discovery.md](phase3a-discovery.md) for live-data
-findings). Remaining: 3d shadow soak in prod, 3e flip + persona A/B. Phases 1–2 are live
-at `gong-mcp-5nu8.onrender.com`.
+findings) and live-verified: 9 personas covering every populated profile shape pass the
+manual smoke test (`npm run smoke:policy`, results on PR #5). Remaining: 3d shadow soak in
+prod, 3e flip + UI-vs-MCP A/B (runbook in [remote-gateway.md](remote-gateway.md)).
+Phases 1–2 are live at `gong-mcp-5nu8.onrender.com`.
 
 ---
 
