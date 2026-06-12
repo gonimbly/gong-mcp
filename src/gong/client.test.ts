@@ -98,6 +98,13 @@ describe("GongClient — consecutive error spike", () => {
     const client = new GongClient("https://api.gong.test");
     const alerts: string[] = [];
 
+    // Reset module-level counter by making one successful call before the error sequence.
+    // consecutiveErrors is shared across tests; a prior test may have incremented it.
+    globalThis.fetch = (async () =>
+      new Response(JSON.stringify({}), { status: 200, headers: { "content-type": "application/json" } })
+    ) as typeof fetch;
+    await client.listWorkspaces().catch(() => {});
+
     globalThis.fetch = (async (input: unknown, init?: RequestInit) => {
       const url = String(input);
       if (url.startsWith("https://hooks.slack.com")) {
