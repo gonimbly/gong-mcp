@@ -3,11 +3,23 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { GongClient } from "../gong/client.js";
 
 const dateFilter = {
-  fromDateTime: z.string().describe("ISO 8601 start date"),
-  toDateTime: z.string().describe("ISO 8601 end date"),
+  fromDateTime: z.string().describe("Start of date range (ISO 8601 or YYYY-MM-DD)"),
+  toDateTime: z.string().describe("End of date range (ISO 8601 or YYYY-MM-DD)"),
   userIds: z.array(z.string()).optional().describe("Filter by specific user IDs (omit for all users)"),
   workspaceId: z.string().optional().describe("Filter by workspace ID"),
 };
+
+// Gong's stats API requires fromDate/toDate (YYYY-MM-DD), not fromDateTime/toDateTime.
+function toStatsFilter(args: {
+  fromDateTime: string;
+  toDateTime: string;
+  userIds?: string[];
+  workspaceId?: string;
+  [key: string]: unknown;
+}): Record<string, unknown> {
+  const { fromDateTime, toDateTime, ...rest } = args;
+  return { ...rest, fromDate: fromDateTime.slice(0, 10), toDate: toDateTime.slice(0, 10) };
+}
 
 export function registerStatsTools(server: McpServer, client: GongClient) {
   server.tool(
@@ -15,7 +27,7 @@ export function registerStatsTools(server: McpServer, client: GongClient) {
     "Get aggregated activity stats for reps over a date range: total calls, talk ratio, longest monologue, interactivity score, patience, topics covered.",
     dateFilter,
     async (args) => {
-      const data = await client.getActivityAggregate({ filter: args });
+      const data = await client.getActivityAggregate({ filter: toStatsFilter(args) });
       return { content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] };
     }
   );
@@ -28,7 +40,7 @@ export function registerStatsTools(server: McpServer, client: GongClient) {
       periodSize: z.enum(["Weekly", "Monthly"]).optional().describe("Period grouping"),
     },
     async (args) => {
-      const data = await client.getActivityAggregateByPeriod({ filter: args });
+      const data = await client.getActivityAggregateByPeriod({ filter: toStatsFilter(args) });
       return { content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] };
     }
   );
@@ -38,7 +50,7 @@ export function registerStatsTools(server: McpServer, client: GongClient) {
     "Get day-by-day activity stats per rep. Good for spotting specific days with high/low activity.",
     dateFilter,
     async (args) => {
-      const data = await client.getActivityDayByDay({ filter: args });
+      const data = await client.getActivityDayByDay({ filter: toStatsFilter(args) });
       return { content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] };
     }
   );
@@ -51,7 +63,7 @@ export function registerStatsTools(server: McpServer, client: GongClient) {
       scorecardIds: z.array(z.string()).optional().describe("Filter by specific scorecard IDs"),
     },
     async (args) => {
-      const data = await client.getScorecardStats({ filter: args });
+      const data = await client.getScorecardStats({ filter: toStatsFilter(args) });
       return { content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] };
     }
   );
@@ -61,7 +73,7 @@ export function registerStatsTools(server: McpServer, client: GongClient) {
     "Get interaction-level stats: talk/listen ratio, filler words, interruptions, longest monologue per call.",
     dateFilter,
     async (args) => {
-      const data = await client.getInteractionStats({ filter: args });
+      const data = await client.getInteractionStats({ filter: toStatsFilter(args) });
       return { content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] };
     }
   );

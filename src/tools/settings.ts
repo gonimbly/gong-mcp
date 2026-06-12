@@ -37,6 +37,7 @@ export function registerSettingsTools(server: McpServer, client: GongClient) {
     "gong_get_coaching",
     "Get coaching data for reps: coaching sessions, feedback given, and behavior improvements over time.",
     {
+      workspaceId: z.string().describe("Workspace ID (required by Gong — use gong_list_workspaces to find yours)"),
       fromDateTime: z.string().optional().describe("ISO 8601 start date"),
       toDateTime: z.string().optional().describe("ISO 8601 end date"),
       userId: z.string().optional().describe("Filter by specific rep user ID"),

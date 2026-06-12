@@ -193,7 +193,7 @@ export class ScopedGongClient extends GongClient {
     return super.getInteractionStats(this.isAdmin ? body : this.selfScope(body));
   }
 
-  override getCoaching(params?: { fromDateTime?: string; toDateTime?: string; userId?: string }) {
+  override getCoaching(params?: { workspaceId?: string; fromDateTime?: string; toDateTime?: string; userId?: string }) {
     return super.getCoaching(this.isAdmin ? params : { ...params, userId: this.identity.userId });
   }
 

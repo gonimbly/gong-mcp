@@ -421,7 +421,7 @@ export class GongClient {
 
   // ── Coaching & Outcomes ──────────────────────────────────────────────────
 
-  getCoaching(params?: { fromDateTime?: string; toDateTime?: string; userId?: string }) {
+  getCoaching(params?: { workspaceId?: string; fromDateTime?: string; toDateTime?: string; userId?: string }) {
     return this.request(`/v2/coaching${this.qs(params ?? {})}`);
   }
 
