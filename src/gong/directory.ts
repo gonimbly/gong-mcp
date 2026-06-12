@@ -70,10 +70,12 @@ export async function loadUserDirectory(client: GongClient): Promise<DirectoryUs
   return users;
 }
 
-/** Case-insensitive substring match on full name or email. */
+/** Case-insensitive substring match on full name or email; a purely numeric
+ * query is treated as an exact Gong userId. */
 export function matchDirectoryUsers(users: DirectoryUser[], query: string): DirectoryUser[] {
   const q = query.trim().toLowerCase();
   if (!q) return [];
+  if (/^\d+$/.test(q)) return users.filter((u) => u.userId === q);
   return users.filter((u) => u.fullName.toLowerCase().includes(q) || u.email.includes(q));
 }
 

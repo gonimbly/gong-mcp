@@ -16,7 +16,7 @@
  * Field shapes were verified against the live API on 2026-06-12 — see
  * docs/backlog-call-discovery-tools.md "Live verification findings".
  */
-import type { GongClient } from "./client.js";
+import { GongApiError, type GongClient } from "./client.js";
 import type { GongIdentity } from "./identity.js";
 import { scanPages } from "./pagination.js";
 import { loadUserDirectory, matchDirectoryUsers } from "./directory.js";
@@ -220,6 +220,15 @@ export interface FindCallsResult {
   note?: string;
 }
 
+function compactParty(p: ExtensiveParty): CompactParticipant {
+  return {
+    name: p.name,
+    email: p.emailAddress,
+    userId: p.userId != null ? String(p.userId) : undefined,
+    affiliation: p.affiliation,
+  };
+}
+
 function toCompactCall(call: ExtensiveCallRecord, matchedOn: string[]): CompactCall {
   const meta = call.metaData ?? {};
   const account = accountNames(call)[0];
@@ -233,12 +242,7 @@ function toCompactCall(call: ExtensiveCallRecord, matchedOn: string[]): CompactC
     workspaceId: meta.workspaceId != null ? String(meta.workspaceId) : undefined,
     primaryUserId: meta.primaryUserId != null ? String(meta.primaryUserId) : undefined,
     ...(account ? { account } : {}),
-    participants: (call.parties ?? []).map((p) => ({
-      name: p.name,
-      email: p.emailAddress,
-      userId: p.userId != null ? String(p.userId) : undefined,
-      affiliation: p.affiliation,
-    })),
+    participants: (call.parties ?? []).map(compactParty),
     matchedOn,
   };
 }
@@ -261,9 +265,10 @@ export interface FindCallsOptions {
 }
 
 // Gong 404s ("No calls found corresponding to the provided filters") on a
-// valid filter with zero matches — that is an empty result, not an error.
+// valid filter with zero matches — that is an empty result, not an error. The
+// text check distinguishes it from other 404s (e.g. a misconfigured base URL).
 function isNoCallsFound(err: unknown): boolean {
-  return err instanceof Error && /Gong API error 404/.test(err.message) && /No calls found/i.test(err.message);
+  return err instanceof GongApiError && err.status === 404 && /No calls found/i.test(err.message);
 }
 
 interface ScanSpec {
@@ -389,13 +394,15 @@ export async function findCalls(client: GongClient, opts: FindCallsOptions): Pro
   let participantResolution: FindCallsResult["participantResolution"];
   if (participantQuery) {
     const q = participantQuery.toLowerCase();
+    const isUserId = /^\d+$/.test(q);
     const directoryMatches = matchDirectoryUsers(await loadUserDirectory(client), q);
     participant = {
-      userIds: new Set(directoryMatches.map((u) => u.userId)),
+      // A numeric query is an exact userId — honored even when the directory
+      // no longer lists that user (departed reps still appear on old calls).
+      userIds: new Set([...directoryMatches.map((u) => u.userId), ...(isUserId ? [q] : [])]),
       // Fragments cover external attendees and unlinked party records, which
-      // are not in the directory.
-      emailFragment: q,
-      nameFragment: q,
+      // are not in the directory. Meaningless for a numeric id.
+      ...(isUserId ? {} : { emailFragment: q, nameFragment: q }),
     };
     participantResolution = {
       query: participantQuery,
@@ -403,7 +410,9 @@ export async function findCalls(client: GongClient, opts: FindCallsOptions): Pro
       ambiguous: directoryMatches.length > 1,
       note:
         directoryMatches.length === 0
-          ? `"${participantQuery}" matched no Gong user — matching call participants by email/name fragment instead (covers external attendees).`
+          ? isUserId
+            ? `"${participantQuery}" is not in the Gong user directory — matching call participants by exact userId.`
+            : `"${participantQuery}" matched no Gong user — matching call participants by email/name fragment instead (covers external attendees).`
           : directoryMatches.length > 1
             ? `"${participantQuery}" matched ${directoryMatches.length} Gong users; results include calls for all of them. ` +
               `Use gong_find_user and re-run with the exact email to disambiguate.`
@@ -534,13 +543,7 @@ export async function summarizeCall(client: GongClient, callId: string): Promise
     language: meta.language,
     workspaceId: meta.workspaceId != null ? String(meta.workspaceId) : undefined,
     ...(account ? { account } : {}),
-    participants: (call.parties ?? []).map((p) => ({
-      name: p.name,
-      email: p.emailAddress,
-      userId: p.userId != null ? String(p.userId) : undefined,
-      affiliation: p.affiliation,
-      title: p.title,
-    })),
+    participants: (call.parties ?? []).map((p) => ({ ...compactParty(p), title: p.title })),
     outcome: toText(content.callOutcome),
     brief: content.brief || undefined,
     keyPoints: toTextArray(content.keyPoints),

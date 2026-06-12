@@ -15,16 +15,17 @@ const FIND_USER_DISPLAY_CAP = 25;
 export function registerDiscoveryTools(server: McpServer, client: GongClient, identity?: GongIdentity) {
   server.tool(
     "gong_find_calls",
-    "Find Gong calls by participant (name or email), client/account, and/or title text in a date range. " +
-      "ALWAYS prefer this over gong_list_calls or gong_get_extensive_calls with manual filtering when the " +
-      "question is about a person's or a client's calls — it scans multiple pages server-side, matches " +
+    "Find Gong calls by participant (name, email, or userId), client/account, and/or title text in a date " +
+      "range. ALWAYS prefer this over gong_list_calls or gong_get_extensive_calls with manual filtering when " +
+      "the question is FINDING a person's or a client's calls — it scans multiple pages server-side, matches " +
       "participants by Gong user, email, or display name (external attendees included), matches accounts via " +
       "CRM context, call titles, and external email domains, and returns compact results with a coverage " +
-      "report (scanned/matched/truncated).",
+      "report (scanned/matched/truncated). For full enriched content of already-known calls, follow up with " +
+      "gong_call_summary or gong_get_extensive_calls.",
     {
       participant: z.string().optional().describe(
-        "Person to find calls for: partial name or email, case-insensitive (e.g. 'nikki' or 'nikki@acme.com'). " +
-        "Matches Gong users AND external attendees."
+        "Person to find calls for: partial name, email, or exact Gong userId, case-insensitive (e.g. 'nikki' " +
+        "or 'nikki@acme.com'). Matches Gong users AND external attendees."
       ),
       account: z.string().optional().describe(
         "Client/account name or email-domain fragment (e.g. 'Acme' or 'acme.com'). Matched against CRM account " +

@@ -238,6 +238,19 @@ describe("findCalls participant matching", () => {
     assert.equal(result.participantResolution?.matchedUsers.length, 0);
     assert.match(result.participantResolution?.note ?? "", /matched no Gong user/);
   });
+
+  test("a numeric participant is an exact userId — resolved via the directory", async () => {
+    const result = await findCalls(client, { participant: "501" });
+    assert.deepEqual(result.calls.map((c) => c.id), ["c-1"]);
+    assert.deepEqual(result.calls[0].matchedOn, ["participant:userId"]);
+    assert.deepEqual(result.participantResolution?.matchedUsers.map((u) => u.userId), ["501"]);
+  });
+
+  test("a numeric participant matches calls even when the user left the directory", async () => {
+    const result = await findCalls(client, { participant: "999" });
+    assert.deepEqual(result.calls.map((c) => c.id), ["c-6"]);
+    assert.match(result.participantResolution?.note ?? "", /not in the Gong user directory/);
+  });
 });
 
 describe("findCalls account matching", () => {

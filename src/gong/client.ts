@@ -1,6 +1,15 @@
 import { loadTokens, saveTokens, hasLegacyCredentials, type OAuthTokens } from "./tokenStore.js";
 import { refreshAccessToken } from "./oauth.js";
 
+/** A non-2xx response from the Gong API, carrying the HTTP status for callers
+ * that branch on it (e.g. Gong signals "no results" as a 404). */
+export class GongApiError extends Error {
+  constructor(public readonly status: number, message: string) {
+    super(message);
+    this.name = "GongApiError";
+  }
+}
+
 export class GongClient {
   private readonly baseUrl: string;
   private refreshPromise: Promise<OAuthTokens> | null = null;
@@ -79,7 +88,7 @@ export class GongClient {
 
     if (!response.ok) {
       const text = await response.text().catch(() => "");
-      throw new Error(`Gong API error ${response.status}: ${text}`);
+      throw new GongApiError(response.status, `Gong API error ${response.status}: ${text}`);
     }
 
     return response.json() as Promise<T>;

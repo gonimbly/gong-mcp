@@ -98,6 +98,12 @@ describe("matchDirectoryUsers", () => {
     assert.equal(matches.find((u) => u.userId === "503")?.active, false);
   });
 
+  test("a purely numeric query is an exact userId match", async () => {
+    const users = await loadUserDirectory(client);
+    assert.deepEqual(matchDirectoryUsers(users, "503").map((u) => u.fullName), ["Brian Two"]);
+    assert.deepEqual(matchDirectoryUsers(users, "50"), [], "no substring matching on ids");
+  });
+
   test("blank query matches nothing", async () => {
     const users = await loadUserDirectory(client);
     assert.deepEqual(matchDirectoryUsers(users, "   "), []);
