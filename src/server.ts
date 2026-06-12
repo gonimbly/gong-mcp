@@ -33,6 +33,7 @@ import { registerMeetingTools } from "./tools/meetings.js";
 import { registerPermissionTools } from "./tools/permissions.js";
 import { registerDataPrivacyTools } from "./tools/dataprivacy.js";
 import { registerLogTools } from "./tools/logs.js";
+import { sendSlackAlert } from "./utils/alert.js";
 
 const SESSION_IDLE_TTL_MS = 8 * 60 * 60 * 1000; // matches access-token lifetime
 
@@ -71,6 +72,7 @@ interface Session {
 }
 
 const sessions = new Map<string, Session>();
+const seenEmails = new Set<string>();
 
 setInterval(() => {
   const cutoff = Date.now() - SESSION_IDLE_TTL_MS;
@@ -190,6 +192,10 @@ app.post("/mcp", bearer, async (req, res) => {
           `[gateway] Session ${id} started for ${email} (Gong user ${identity.userId}, role ${role}, ` +
           `policy mode ${policyMode}, access: ${access})`
         );
+        if (!seenEmails.has(email)) {
+          seenEmails.add(email);
+          sendSlackAlert(`👋 New user connected to Gong MCP: \`${email}\` (role: ${role})`);
+        }
       },
     });
     transport.onclose = () => {
@@ -242,5 +248,11 @@ app.listen(port, () => {
   // Credential self-check so misconfiguration fails loudly at boot, not during a user session
   gongClient.listWorkspaces()
     .then(() => console.error("[gateway] Gong credential check: OK"))
-    .catch((err) => console.error(`[gateway] Gong credential check FAILED: ${err instanceof Error ? err.message : err}`));
+    .catch((err) => {
+      console.error(`[gateway] Gong credential check FAILED: ${err instanceof Error ? err.message : err}`);
+      sendSlackAlert(
+        "🚨 Gong credential check FAILED at startup — all API calls will fail until " +
+        "`GONG_ACCESS_KEY` is updated in Render."
+      );
+    });
 });

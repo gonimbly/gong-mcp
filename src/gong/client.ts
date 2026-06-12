@@ -1,6 +1,11 @@
 import { loadTokens, saveTokens, hasLegacyCredentials, type OAuthTokens } from "./tokenStore.js";
 import { refreshAccessToken } from "./oauth.js";
 import { quotaTracker } from "./quota.js";
+import { sendSlackAlert } from "../utils/alert.js";
+
+let consecutiveErrors = 0;
+let consecutiveAlertFired = false;
+const CONSECUTIVE_ERROR_THRESHOLD = 5;
 
 /** A non-2xx response from the Gong API, carrying the HTTP status for callers
  * that branch on it (e.g. Gong signals "no results" as a 404). */
@@ -96,9 +101,24 @@ export class GongClient {
 
     if (!response.ok) {
       const text = await response.text().catch(() => "");
+      if (response.status === 429) {
+        sendSlackAlert(
+          "⚠️ Gong API returned 429 (rate limited). " +
+          "Our quota counter may be undercounting — check for concurrent processes using the same org credential."
+        );
+      }
+      consecutiveErrors++;
+      if (consecutiveErrors >= CONSECUTIVE_ERROR_THRESHOLD && !consecutiveAlertFired) {
+        consecutiveAlertFired = true;
+        sendSlackAlert(
+          `🔴 ${CONSECUTIVE_ERROR_THRESHOLD} consecutive Gong API errors — possible outage or credential issue.`
+        );
+      }
       throw new GongApiError(response.status, `Gong API error ${response.status}: ${text}`);
     }
 
+    consecutiveErrors = 0;
+    consecutiveAlertFired = false;
     quotaTracker.increment();
     return response.json() as Promise<T>;
   }
