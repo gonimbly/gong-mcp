@@ -5,8 +5,9 @@ client Acme" one-tool-call questions. Today Claude struggles with these — it h
 orchestrate multi-page scans and client-side filtering itself, and usually gives up
 early or burns a lot of tokens.
 
-**Status:** specced, not started. Implement as a **follow-up PR** (do not extend
-PR #5, which is the Phase 3 access-control change).
+**Status:** implemented in PR #6 (2026-06-12) — `gong_find_calls`, `gong_my_calls`,
+`gong_find_user`, `gong_call_summary` in `src/tools/discovery.ts` on the engine in
+`src/gong/discovery.ts`. Live verification findings below.
 
 **Branch context:** specced on `iulyanvicari/phase3-access-control-plan`
 (2026-06-11). Assumes Phase 3 has merged: tools receive a policy-enforcing client,
@@ -111,6 +112,34 @@ contentSelector: … })` call with the content fields from the existing
 `gong_get_extensive_calls` registration, flattened to compact text. Policy:
 `getCall`/`getExtensiveCalls` overrides already gate per-call visibility.
 
+## Live verification findings (probed 2026-06-12, `npm run probe:extensive-filter`)
+
+Answers to the open questions above, verified against the live API with the
+keychain OAuth credential:
+
+1. **`filter.primaryUserIds` IS accepted and honored** — probing a rep who was
+   primary on calls in range returned exactly their calls (29/29 honored).
+   Deliberately NOT used by `gong_find_calls`: it only covers the *primary rep*,
+   so it can't answer participant questions, and mixing a pre-filtered scan with
+   a parties scan would make the coverage report dishonest. Candidate future
+   fast-path for `gong_my_calls` only.
+2. **`contentSelector.context: "Extended"` works** — 90/100 calls in a 14-day
+   range carried CRM context shaped
+   `[{ system: "Salesforce", objects: [{ objectType: "Account", objectId,
+   fields: [{ name, value }] }] }]` with `Name`, `Website`, `Domain__c` among
+   the fields. The CRM matching arm is therefore ENABLED in `gong_find_calls`;
+   the selector is only requested when `account` is given because it triples the
+   page weight (694 KB vs 195 KB parties-only).
+3. **`metaData.url`** (gong.app.gong.io deep link) is present on 100/100 calls —
+   compact results include it for free (open question 3: yes).
+4. **Strictness:** `/v2/calls/extensive` 400s on a bare `{}` body (same as
+   `/v2/users/extensive`, quirk 1 below) but ACCEPTS `{ "filter": {} }` and
+   returns an unbounded scan. Party `affiliation` values: `Internal`,
+   `External`, `Unknown`.
+5. **Scale baseline:** 766 calls in the last 14 days; a parties-only page is
+   ~195 KB of JSON. Manual paging through the model was never viable — that is
+   ~50k tokens per page before any filtering.
+
 ## Live API quirks (hard-won on 2026-06-11 — don't rediscover these)
 
 1. `/v2/users/extensive` **400s on a bare `{}` body** — `"filter": {}` must be
@@ -119,6 +148,15 @@ contentSelector: … })` call with the content fields from the existing
    the live API** (`npm run smoke:policy` pattern, keychain OAuth or org keys).
 2. Stats endpoints want `filter.fromDate`/`toDate` (date-only), while call
    endpoints want `fromDateTime`/`toDateTime` (ISO). Don't mix them up.
+   (This bit production on 2026-06-12: the stats tools were sending
+   `filter.fromDateTime` and could never succeed. Probed and fixed —
+   `npm run probe:stats-coaching`. More shapes pinned the same day:
+   `/v2/stats/activity/aggregate-by-period` takes `aggregationPeriod` as a
+   TOP-LEVEL body field, sibling of `filter`, UPPERCASE `DAY|WEEK|MONTH|QUARTER`
+   — wrong values surface as "Json parse error". `GET /v2/coaching` requires
+   kebab-case `workspace-id` + `manager-id` query params and `from`/`to` as ISO
+   OffsetDateTime — date-only is rejected there, the opposite of stats. Coaching
+   data is manager-centric: an IC gets an empty `coachingData`, not an error.)
 3. Stats endpoints **404** when none of the requested userIds have stats data —
    handle as "no data", not as an error.
 4. Pagination: 100 records/page, `records.totalRecords` + `records.cursor`;
@@ -127,6 +165,25 @@ contentSelector: … })` call with the content fields from the existing
    userId, anywhere parties are matched.
 6. Org credential requires the regional `GONG_BASE_URL` (e.g.
    `us-32447.api.gong.io`); the keychain OAuth token works on the default.
+7. Full-surface findings from the 2026-06-12 all-tools sweep
+   (`npm run probe:all-tools` — every read endpoint fired live, write
+   endpoints never fired):
+   - `/v2/entities/ask-entity` + `get-brief`: `crmEntityType` (NOT
+     `entityType`), values `ACCOUNT`/`DEAL` verified; `timePeriod` REQUIRED,
+     only `THIS_WEEK|THIS_MONTH|THIS_QUARTER|THIS_YEAR` — arbitrary
+     from/to ranges are not supported. `get-brief`'s `briefName` must match a
+     PUBLISHED brief template, else 404.
+   - `/v2/crm/*` reads: every call needs `integrationId` (a long) +
+     `objectType`; these only cover generic-CRM-API integrations — orgs on the
+     native Salesforce connector (like this one) have NONE registered.
+   - `/v2/flows` + `/v2/flows/folders`: require `flowOwnerEmail` /
+     `flowFolderOwnerEmail`; 403 without an Engage license.
+   - `/v2/logs`: `logType` required; `UserActivityLog` is the standard value.
+   - `/v2/library/folders`: 400s bare in a multi-workspace org — pass
+     `workspaceId` (camelCase, unlike coaching's kebab params).
+   - `/v2/all-permission-profiles`: `workspaceId` required.
+   - `/v2/data-privacy/data-for-email-address`: rejects INTERNAL user emails —
+     external participants only.
 
 ## Testing
 

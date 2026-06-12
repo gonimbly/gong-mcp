@@ -1,28 +1,53 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { GongClient } from "../gong/client.js";
+import type { GongIdentity } from "../gong/identity.js";
 
-export function registerFlowTools(server: McpServer, client: GongClient) {
+export function registerFlowTools(server: McpServer, client: GongClient, identity?: GongIdentity) {
+  // The flows API is owner-scoped: both list endpoints require an owner email
+  // and 403 when that user has no Gong Engage license.
+  const resolveOwner = (email: string | undefined, param: string): string => {
+    const owner = email ?? identity?.email;
+    if (!owner) {
+      throw new Error(`${param} is required when no user identity is connected — flows are listed per owner.`);
+    }
+    return owner;
+  };
+
   server.tool(
     "gong_list_flows",
-    "List all Gong Engage flows (sales sequences/cadences) available in the workspace.",
+    "List Gong Engage flows (sales sequences/cadences) owned by a user. Defaults to the connected user; " +
+      "requires that user to have a Gong Engage license.",
     {
+      flowOwnerEmail: z.string().optional().describe("Flow owner's email (default: the connected user)"),
       workspaceId: z.string().optional().describe("Filter by workspace ID"),
+      cursor: z.string().optional().describe("Pagination cursor"),
     },
     async (args) => {
-      const data = await client.listFlows(args.workspaceId);
+      const data = await client.listFlows({
+        flowOwnerEmail: resolveOwner(args.flowOwnerEmail, "flowOwnerEmail"),
+        workspaceId: args.workspaceId,
+        cursor: args.cursor,
+      });
       return { content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] };
     }
   );
 
   server.tool(
     "gong_list_flow_folders",
-    "List all folders used to organize flows in Gong Engage.",
+    "List the folders organizing a user's flows in Gong Engage. Defaults to the connected user; requires a " +
+      "Gong Engage license.",
     {
+      flowFolderOwnerEmail: z.string().optional().describe("Folder owner's email (default: the connected user)"),
       workspaceId: z.string().optional().describe("Filter by workspace ID"),
+      cursor: z.string().optional().describe("Pagination cursor"),
     },
     async (args) => {
-      const data = await client.listFlowFolders(args.workspaceId);
+      const data = await client.listFlowFolders({
+        flowFolderOwnerEmail: resolveOwner(args.flowFolderOwnerEmail, "flowFolderOwnerEmail"),
+        workspaceId: args.workspaceId,
+        cursor: args.cursor,
+      });
       return { content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] };
     }
   );

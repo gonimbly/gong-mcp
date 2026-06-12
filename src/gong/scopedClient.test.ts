@@ -140,19 +140,20 @@ describe("self-scoped stats", () => {
     }
   });
 
-  test("member coaching is forced to their own userId", async () => {
-    await member.getCoaching({ userId: "111" });
-    assert.ok(requests[0].url.includes("userId=222"));
-    assert.ok(!requests[0].url.includes("userId=111"));
+  test("member coaching is forced to their own manager view", async () => {
+    await member.getCoaching({ workspaceId: "w1", managerId: "111", from: "2026-05-01T00:00:00Z", to: "2026-05-31T00:00:00Z" });
+    assert.ok(requests[0].url.includes("manager-id=222"));
+    assert.ok(!requests[0].url.includes("manager-id=111"));
+    assert.ok(requests[0].url.includes("workspace-id=w1"));
   });
 });
 
 describe("admin-only tools", () => {
   const denied: Array<[string, () => unknown]> = [
     ["audit logs", () => member.getLogs()],
-    ["AI ask account", () => member.askAccount({ workspaceId: "w", crmAccountId: "a", fromDateTime: "f", toDateTime: "t", question: "q" })],
-    ["AI ask deal", () => member.askDeal({ workspaceId: "w", crmDealId: "d", fromDateTime: "f", toDateTime: "t", question: "q" })],
-    ["AI brief", () => member.generateBrief({ workspaceId: "w", briefName: "b", entityType: "ACCOUNT", crmEntityId: "e", periodType: "p", fromDateTime: "f", toDateTime: "t" })],
+    ["AI ask account", () => member.askAccount({ workspaceId: "w", crmAccountId: "a", timePeriod: "THIS_MONTH", question: "q" })],
+    ["AI ask deal", () => member.askDeal({ workspaceId: "w", crmDealId: "d", timePeriod: "THIS_MONTH", question: "q" })],
+    ["AI brief", () => member.generateBrief({ workspaceId: "w", briefName: "b", crmEntityType: "ACCOUNT", crmEntityId: "e", timePeriod: "THIS_MONTH" })],
     ["data privacy read", () => member.getDataForEmail("x@y.com")],
     ["data erasure", () => member.eraseDataForEmail("x@y.com")],
     ["permission profiles", () => member.listAllPermissionProfiles()],
@@ -175,7 +176,7 @@ describe("admin-only tools", () => {
   }
 
   test("admin passes through on admin-only tools", async () => {
-    await admin.getLogs();
+    await admin.getLogs({ logType: "UserActivityLog" });
     await admin.getDataForEmail("x@y.com");
     await admin.listAllPermissionProfiles();
     assert.equal(requests.length, 3);
@@ -189,7 +190,7 @@ describe("open tools", () => {
     await member.listScorecards();
     await member.listTrackers();
     await member.listLibraryFolders();
-    await member.listFlows();
+    await member.listFlows({ flowOwnerEmail: MEMBER_IDENTITY.email });
     assert.equal(requests.length, 6);
   });
 });

@@ -226,7 +226,7 @@ export class PolicyGongClient extends GongClient {
     return super.getActivityAggregate(this.scopeStats(body));
   }
 
-  override getActivityAggregateByPeriod(body: { filter: Record<string, unknown> }) {
+  override getActivityAggregateByPeriod(body: { filter: Record<string, unknown>; aggregationPeriod?: string }) {
     return super.getActivityAggregateByPeriod(this.scopeStats(body));
   }
 
@@ -242,14 +242,16 @@ export class PolicyGongClient extends GongClient {
     return super.getInteractionStats(this.scopeStats(body));
   }
 
-  override getCoaching(params?: { fromDateTime?: string; toDateTime?: string; userId?: string }) {
-    const access = this.access("coaching");
+  override getCoaching(params: Parameters<GongClient["getCoaching"]>[0]) {
+    const access = this.access("coaching", params.workspaceId);
     if (access.visibleUserIds === null) return super.getCoaching(params);
-    const target = params?.userId ?? this.identity.userId;
+    // Coaching is manager-centric: the target manager must be within the
+    // profile's coaching visibility.
+    const target = params.managerId ?? this.identity.userId;
     if (!access.visibleUserIds.has(String(target))) {
-      this.deny(`coaching data for user ${target}`, "They are outside your profile's visibility.");
+      this.deny(`coaching data for manager ${target}`, "They are outside your profile's visibility.");
     }
-    return super.getCoaching({ ...params, userId: target });
+    return super.getCoaching({ ...params, managerId: target });
   }
 
   // ── AI synthesis: requires org-wide call access in the target workspace ────
@@ -281,9 +283,9 @@ export class PolicyGongClient extends GongClient {
     return [...this.policy.perWorkspace.values()].map((ws) => ws.library);
   }
 
-  override listLibraryFolders() {
+  override listLibraryFolders(workspaceId?: string) {
     if (this.libraryLevels().every((l) => l.level === "none")) this.deny("the call library");
-    return super.listLibraryFolders();
+    return super.listLibraryFolders(workspaceId);
   }
 
   override getLibraryFolderContent(folderId: string, cursor?: string) {
@@ -304,19 +306,19 @@ export class PolicyGongClient extends GongClient {
     if (!open) this.deny(what);
   }
 
-  override getCrmEntities(params: { crmObjectType: string; fromDateTime?: string; cursor?: string }) {
+  override getCrmEntities(params: Parameters<GongClient["getCrmEntities"]>[0]) {
     this.requireDealsRead("CRM data");
     return super.getCrmEntities(params);
   }
 
-  override getCrmEntitySchema(crmObjectType: string) {
+  override getCrmEntitySchema(params: Parameters<GongClient["getCrmEntitySchema"]>[0]) {
     this.requireDealsRead("CRM data");
-    return super.getCrmEntitySchema(crmObjectType);
+    return super.getCrmEntitySchema(params);
   }
 
-  override getCrmRequestStatus(requestId: string) {
+  override getCrmRequestStatus(params: Parameters<GongClient["getCrmRequestStatus"]>[0]) {
     this.requireDealsRead("CRM data");
-    return super.getCrmRequestStatus(requestId);
+    return super.getCrmRequestStatus(params);
   }
 
   override upsertCrmEntities(body: unknown) {
@@ -440,7 +442,7 @@ export class PolicyGongClient extends GongClient {
     return super.eraseDataForPhone(phoneNumber);
   }
 
-  override getLogs(params?: { fromDateTime?: string; toDateTime?: string; cursor?: string }) {
+  override getLogs(params: Parameters<GongClient["getLogs"]>[0]) {
     this.requireCapability("techAdmin", "audit logs");
     return super.getLogs(params);
   }

@@ -177,7 +177,7 @@ export class ScopedGongClient extends GongClient {
     return super.getActivityAggregate(this.isAdmin ? body : this.selfScope(body));
   }
 
-  override getActivityAggregateByPeriod(body: { filter: Record<string, unknown> }) {
+  override getActivityAggregateByPeriod(body: { filter: Record<string, unknown>; aggregationPeriod?: string }) {
     return super.getActivityAggregateByPeriod(this.isAdmin ? body : this.selfScope(body));
   }
 
@@ -193,8 +193,9 @@ export class ScopedGongClient extends GongClient {
     return super.getInteractionStats(this.isAdmin ? body : this.selfScope(body));
   }
 
-  override getCoaching(params?: { fromDateTime?: string; toDateTime?: string; userId?: string }) {
-    return super.getCoaching(this.isAdmin ? params : { ...params, userId: this.identity.userId });
+  override getCoaching(params: Parameters<GongClient["getCoaching"]>[0]) {
+    // Coaching is manager-centric: members only ever see their own manager view
+    return super.getCoaching(this.isAdmin ? params : { ...params, managerId: this.identity.userId });
   }
 
   // ── AI synthesis: admin-only (may draw on calls the member cannot see) ─────
@@ -408,7 +409,7 @@ export class ScopedGongClient extends GongClient {
     return super.eraseDataForPhone(phoneNumber);
   }
 
-  override getLogs(params?: { fromDateTime?: string; toDateTime?: string; cursor?: string }) {
+  override getLogs(params: Parameters<GongClient["getLogs"]>[0]) {
     this.requireAdmin("audit logs");
     return super.getLogs(params);
   }

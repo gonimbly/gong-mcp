@@ -23,7 +23,7 @@
  *
  * This found a real bug on 2026-06-11: /v2/users/extensive 400s on a bare {}
  * body, which unit-test fakes happily accepted. Run it against each persona
- * before flipping GONG_POLICY_MODE=profiles (see docs/phase3a-discovery.md).
+ * whenever the resolver or policy client changes (see docs/phase3a-discovery.md).
  */
 import { GongClient } from "../../src/gong/client.js";
 import { PolicyGongClient } from "../../src/gong/policyClient.js";
@@ -262,7 +262,7 @@ if (callsAccess.visibleUserIds !== null) {
   console.log("  (calls=all → AI tools legitimately allowed; skipping deny check)");
 }
 if (!policy.capabilities.techAdmin) {
-  await expectDenied("admin: audit logs without techAdmin", () => scoped.getLogs());
+  await expectDenied("admin: audit logs without techAdmin", () => scoped.getLogs({ logType: "UserActivityLog" }));
   await expectDenied("admin: data privacy lookup without techAdmin", () => scoped.getDataForEmail("x@y.com"));
   await expectDenied("admin: permission profiles without techAdmin", () => scoped.listAllPermissionProfiles());
 } else {

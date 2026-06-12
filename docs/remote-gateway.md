@@ -17,13 +17,13 @@ each user can see.
 
 ## Access model
 
-The gateway has two access models, selected by `GONG_POLICY_MODE`:
+The gateway has two access models (plus a diagnostic), selected by `GONG_POLICY_MODE`:
 
-- **`binary`** (default) — the Phase 2 admin/member model below
-- **`profiles`** — Phase 3: each user gets the same data access as in the Gong UI,
-  driven by their actual Gong permission profile
+- **`profiles`** (default) — Phase 3: each user gets the same data access as in the
+  Gong UI, driven by their actual Gong permission profile
+- **`binary`** — the Phase 2 admin/member model below; the rollback path
 - **`shadow`** — enforces `binary` while logging every decision the profile-based
-  policy would change (`[policy] SHADOW diff …`); use it to validate before flipping
+  policy would change (`[policy] SHADOW diff …`); a diagnostic for comparing the two
 
 ### `binary` mode (Phase 2)
 
@@ -60,19 +60,24 @@ profile), the session degrades to the member policy above — own data only — 
 logs `[policy] DEGRADED`. `GONG_ADMIN_EMAILS` remains a break-glass org-wide
 override in this mode.
 
-### Rollout runbook (binary → profiles)
+### Rollout status & rollback
 
-1. Deploy with `GONG_POLICY_MODE=shadow` (no user impact). Soak ~1 week.
-2. Review the logs: every `[policy] SHADOW diff` line is a place the two models
-   disagree. Expected diffs: managers gaining team visibility, capability-gated
-   writes opening up, AI tools opening for all-calls profiles. Investigate any
-   diff you can't explain before proceeding.
-3. Verify personas live: `npm run smoke:policy -- <email>` (see
-   `tests/manual/README.md`) for at least one user per permission profile.
-4. Flip `GONG_POLICY_MODE=profiles`. Re-run the persona checks; spot-check the
-   Gong UI against MCP results for a scoped persona.
-5. Rollback at any point = set the mode back to `binary` (no data migration;
-   sessions pick it up on next connect).
+`profiles` has been live in prod since 2026-06-12. The shadow soak originally
+planned for the rollout was consciously skipped — the env-var rollback is cheap
+and the `GONG_ADMIN_EMAILS` break-glass keeps admin access in every mode.
+
+- **Rollback** = set `GONG_POLICY_MODE=binary` in the Render dashboard (no data
+  migration; sessions pick it up on next connect). Unset no longer means
+  `binary` — the in-code default is `profiles`.
+- **Rollback trigger:** any report of a user seeing data the Gong UI denies them.
+- **User reports *missing* access?** Check the logs for `[policy] DEGRADED`
+  first — a user in no permission profile fails closed to own-data-only by
+  design. That's a profile assignment to fix in Gong, not a resolver bug.
+- **After any resolver/policy change:** run `npm run smoke:policy -- <email>`
+  (see `tests/manual/README.md`) for at least one user per permission profile,
+  and spot-check the Gong UI against MCP results for a scoped persona.
+- `shadow` mode remains wired in as a diagnostic: it enforces `binary` while
+  logging every decision the profile policy would change (`[policy] SHADOW diff`).
 
 ## How authentication works
 
@@ -135,7 +140,7 @@ This is the server-side credential; it is never shared with users.
 | `SESSION_SIGNING_KEY` | Long random string (Render generates it via the blueprint) |
 | `GONG_ALLOWED_EMAILS` | Optional — unset means any verified `GONG_ALLOWED_DOMAIN` account can sign in (as a member). Set a comma-separated list to restrict sign-in, e.g. during a pilot |
 | `GONG_ADMIN_EMAILS` | Comma-separated admins with org-wide access; everyone else is a member (break-glass override in `profiles` mode) |
-| `GONG_POLICY_MODE` | Optional — `binary` (default), `shadow`, or `profiles`; see "Access model" above |
+| `GONG_POLICY_MODE` | Optional — `profiles` (default), `binary` (rollback), or `shadow` (diagnostic); see "Access model" above |
 | `GONG_ALLOWED_DOMAIN` | Defaults to `gonimbly.com` |
 | `GONG_ACCESS_KEY` / `GONG_ACCESS_KEY_SECRET` | From step 2 |
 | `GONG_BASE_URL` | Your org's API endpoint as shown in Gong → Settings → API (e.g. `https://us-32447.api.gong.io`) — access keys are rejected on the generic `api.gong.io` |
@@ -168,9 +173,10 @@ in the browser on first use.
 
 ## Known limitations
 
-- **Member visibility is "own calls only"** — narrower than Gong's native permission
-  profiles (no team/manager hierarchy yet). Mirroring Gong profiles is a possible
-  future enhancement.
+- **`binary` mode and degraded sessions are "own calls only"** — narrower than
+  Gong's native permission profiles. In the default `profiles` mode this applies
+  only when a user's profile cannot be resolved (fail-closed `[policy] DEGRADED`
+  sessions).
 - **In-memory sessions and client registrations** — a deploy or restart requires
   clients to re-authenticate (Claude handles this automatically).
 - **Stateless JWTs** — access revocation (removing someone from the allowlist, or a

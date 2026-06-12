@@ -4,12 +4,15 @@
 the Gong UI — driven by their actual Gong permission profile, not the current binary
 admin/member model.
 
-**Status:** 3a–3c implemented (`permissionResolver.ts`, `policyClient.ts`, `policyShadow.ts`,
-`GONG_POLICY_MODE` switch — see [phase3a-discovery.md](phase3a-discovery.md) for live-data
-findings) and live-verified: 9 personas covering every populated profile shape pass the
-manual smoke test (`npm run smoke:policy`, results on PR #5). Remaining: 3d shadow soak in
-prod, 3e flip + UI-vs-MCP A/B (runbook in [remote-gateway.md](remote-gateway.md)).
-Phases 1–2 are live at `gong-mcp-5nu8.onrender.com`.
+**Status: complete.** 3a–3c implemented (`permissionResolver.ts`, `policyClient.ts`,
+`policyShadow.ts`, `GONG_POLICY_MODE` switch — see [phase3a-discovery.md](phase3a-discovery.md)
+for live-data findings) and live-verified: 9 personas covering every populated profile shape
+pass the manual smoke test (`npm run smoke:policy`, results on PR #5). 3d (shadow soak) was
+consciously skipped: `profiles` was enabled directly in prod on 2026-06-12, relying on the
+cheap env-var rollback and the `GONG_ADMIN_EMAILS` break-glass instead of a soak week.
+3e: `profiles` is live at `gong-mcp-5nu8.onrender.com` and is now the in-code default —
+rollback procedure and post-change checks in [remote-gateway.md](remote-gateway.md)
+("Rollout status & rollback").
 
 ---
 

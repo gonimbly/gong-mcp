@@ -208,18 +208,20 @@ describe("stats scoping", () => {
     assert.deepEqual(requests[0].body.filter.userIds, ["222"]);
   });
 
-  test("coaching: visible teammate allowed, stranger denied, default self", async () => {
-    await manager.getCoaching({ userId: "300" });
-    assert.ok(requests[0].url.includes("userId=300"));
-    await assert.rejects(async () => manager.getCoaching({ userId: "999" }), AccessDeniedError);
+  test("coaching: visible manager allowed, stranger denied, default self", async () => {
+    const range = { from: "2026-05-01T00:00:00Z", to: "2026-05-31T00:00:00Z" };
+    await manager.getCoaching({ workspaceId: WS1, managerId: "300", ...range });
+    assert.ok(requests[0].url.includes("manager-id=300"));
+    assert.ok(requests[0].url.includes("workspace-id=ws-customers"));
+    await assert.rejects(async () => manager.getCoaching({ workspaceId: WS1, managerId: "999", ...range }), AccessDeniedError);
     requests = [];
-    await manager.getCoaching({});
-    assert.ok(requests[0].url.includes("userId=222"));
+    await manager.getCoaching({ workspaceId: WS1, ...range });
+    assert.ok(requests[0].url.includes("manager-id=222"), "omitted managerId defaults to self");
   });
 });
 
 describe("AI synthesis requires unrestricted call access in the workspace", () => {
-  const aiParams = { workspaceId: WS1, crmAccountId: "a", crmDealId: "d", fromDateTime: "f", toDateTime: "t", question: "q" };
+  const aiParams = { workspaceId: WS1, crmAccountId: "a", crmDealId: "d", timePeriod: "THIS_MONTH", question: "q" };
 
   test("granted for an all-calls profile", async () => {
     await exec.askAccount(aiParams);
@@ -231,7 +233,7 @@ describe("AI synthesis requires unrestricted call access in the workspace", () =
     await assert.rejects(async () => manager.askAccount(aiParams), AccessDeniedError);
     await assert.rejects(async () => manager.askDeal(aiParams), AccessDeniedError);
     await assert.rejects(
-      async () => manager.generateBrief({ workspaceId: WS1, briefName: "b", entityType: "ACCOUNT", crmEntityId: "e", periodType: "p", fromDateTime: "f", toDateTime: "t" }),
+      async () => manager.generateBrief({ workspaceId: WS1, briefName: "b", crmEntityType: "ACCOUNT", crmEntityId: "e", timePeriod: "THIS_MONTH" }),
       AccessDeniedError
     );
     assert.equal(requests.length, 0);
@@ -290,7 +292,7 @@ describe("CRM, deals and the admin surface", () => {
       await assert.rejects(async () => op(), AccessDeniedError);
     }
     assert.equal(requests.length, 0);
-    await exec.getLogs();
+    await exec.getLogs({ logType: "UserActivityLog" });
     await exec.listAllPermissionProfiles();
     assert.equal(requests.length, 2);
   });

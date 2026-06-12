@@ -6,7 +6,7 @@ A Model Context Protocol server for the [Gong REST API](https://gong.app.gong.io
 
 Two ways to run it:
 
-- **Hosted gateway (recommended for teams)** — a deployed web service with Google SSO and per-user data access control. By default members only see their own calls and stats; with `GONG_POLICY_MODE=profiles` the gateway mirrors each user's actual Gong permission profile (team-scoped calls, manager stats, capability-gated writes — see [docs/phase3-access-control-plan.md](docs/phase3-access-control-plan.md)). No local install; users just add a connector URL in Claude. See [docs/remote-gateway.md](docs/remote-gateway.md).
+- **Hosted gateway (recommended for teams)** — a deployed web service with Google SSO and per-user data access control. By default the gateway mirrors each user's actual Gong permission profile (team-scoped calls, manager stats, capability-gated writes — see [docs/phase3-access-control-plan.md](docs/phase3-access-control-plan.md)); `GONG_POLICY_MODE=binary` falls back to a coarser admin/member model. No local install; users just add a connector URL in Claude. See [docs/remote-gateway.md](docs/remote-gateway.md).
 - **Local install (below)** — runs on your machine via stdio, authenticating with a Gong OAuth app. Full org access for whoever holds the credential.
 
 ---
@@ -48,11 +48,12 @@ OAuth tokens are stored in `~/.gong-mcp/tokens.json` (owner read/write only). Th
 
 ## What's inside
 
-40 tools across 13 modules:
+51 tools across 14 modules:
 
 | Module | What you get |
 |---|---|
 | **Setup** | `gong_login` — connect via OAuth browser flow. `gong_logout` — disconnect. `gong_whoami` — check connection status |
+| **Discovery** | `gong_find_calls` — find calls by participant, client, or title. `gong_my_calls` — your own calls (gateway). `gong_find_user` — name/email → Gong user. `gong_call_summary` — one-call digest without the transcript |
 | **Calls** | List, get, transcripts, enriched content (topics, trackers, key points, next steps, outcomes) |
 | **Users** | List, get, settings history, filter by email |
 | **Stats** | Aggregate, by period, day-by-day, scorecard stats, interaction stats |
@@ -67,6 +68,10 @@ OAuth tokens are stored in `~/.gong-mcp/tokens.json` (owner read/write only). Th
 | **Logs** | Audit logs |
 
 ### Highlight tools
+
+**`gong_find_calls`** — "Calls Nikki was on last month", "calls with Acme" — one tool call. The Gong API has no search endpoint, so this scans `/v2/calls/extensive` server-side, matches participants by user/email/name (external attendees included) and accounts via CRM context, titles, and email domains, then returns compact summaries with a coverage report instead of megabytes of raw JSON (~33× smaller in live measurements).
+
+**`gong_call_summary`** — "What was this call about?" without pulling the transcript: outcome, brief, key points, next steps, topics, trackers, participants in a few KB.
 
 **`gong_ask_account`** — Ask Gong's AI a targeted natural-language question about a CRM account. "What are the main objections?" "Which competitors came up?" "What are the open risks?" Gong synthesizes the answer from every related call in the time window.
 
@@ -85,6 +90,8 @@ OAuth tokens are stored in `~/.gong-mcp/tokens.json` (owner read/write only). Th
 Once connected, you can ask Claude things like:
 
 - *"Login to Gong"* — opens browser OAuth flow to connect your account
+- *"What calls was Nikki on in the last two weeks?"*
+- *"Show me my calls from last week"*
 - *"Summarize all calls with Acme Corp this month"*
 - *"What are the top objections reps are hearing this quarter?"*
 - *"Which deals have gone quiet in the last 30 days?"*

@@ -16,12 +16,12 @@ import { mcpAuthRouter, getOAuthProtectedResourceMetadataUrl } from "@modelconte
 import { requireBearerAuth } from "@modelcontextprotocol/sdk/server/auth/middleware/bearerAuth.js";
 import { GoogleOAuthProvider, loadGatewayConfig } from "./auth/googleProvider.js";
 import { GongClient } from "./gong/client.js";
-import { ScopedGongClient, type GatewayRole } from "./gong/scopedClient.js";
-import { PolicyGongClient } from "./gong/policyClient.js";
-import { PermissionResolver, degradedPolicy, type UserPolicy } from "./gong/permissionResolver.js";
-import { shadowGongClient } from "./gong/policyShadow.js";
+import { type GatewayRole } from "./gong/scopedClient.js";
+import { PermissionResolver } from "./gong/permissionResolver.js";
+import { parsePolicyMode, buildSessionClient } from "./gong/sessionClient.js";
 import { resolveGongIdentity, type GongIdentity } from "./gong/identity.js";
 import { registerCallTools } from "./tools/calls.js";
+import { registerDiscoveryTools } from "./tools/discovery.js";
 import { registerUserTools } from "./tools/users.js";
 import { registerStatsTools } from "./tools/stats.js";
 import { registerEntityTools } from "./tools/entities.js";
@@ -55,67 +55,11 @@ const provider = new GoogleOAuthProvider(config);
 const gongClient = new GongClient();
 
 // ── Policy mode (Phase 3) ─────────────────────────────────────────────────────
-//  binary   — Phase 2 admin/member model (default)
-//  shadow   — enforce binary, log every place the profile-based policy disagrees
-//  profiles — enforce the user's Gong permission profile
-type PolicyMode = "binary" | "shadow" | "profiles";
+// Parsing and the policy-mode → client dispatch live in src/gong/sessionClient.ts.
 
-const policyMode: PolicyMode = (() => {
-  // `||` not `??`: an env var saved as an empty string must mean the default, not a boot failure
-  const raw = process.env.GONG_POLICY_MODE || "binary";
-  if (raw === "binary" || raw === "shadow" || raw === "profiles") return raw;
-  throw new Error(`Invalid GONG_POLICY_MODE "${raw}" — expected binary | shadow | profiles`);
-})();
+const policyMode = parsePolicyMode(process.env.GONG_POLICY_MODE);
 
 const permissionResolver = new PermissionResolver(gongClient);
-
-/**
- * Resolve the user's profile policy, failing CLOSED: any resolver error
- * degrades to the Phase 2 member policy (own data only), never to open access.
- */
-async function resolveUserPolicy(identity: GongIdentity): Promise<UserPolicy> {
-  try {
-    return await permissionResolver.resolvePolicy(identity.userId, identity.email);
-  } catch (err) {
-    console.error(
-      `[policy] DEGRADED ${identity.email} to the Phase 2 member policy: ` +
-      `${err instanceof Error ? err.message : err}`
-    );
-    return degradedPolicy(identity.userId, identity.email);
-  }
-}
-
-async function buildSessionClient(identity: GongIdentity, role: GatewayRole): Promise<{ client: GongClient; access: string }> {
-  // Break-glass admins keep org-wide passthrough in every mode
-  if (policyMode === "binary" || (policyMode === "profiles" && role === "admin")) {
-    return {
-      client: new ScopedGongClient(identity, role),
-      access: role === "admin"
-        ? "admin (org-wide data)"
-        : "member — calls and stats are limited to your own activity",
-    };
-  }
-
-  const policy = await resolveUserPolicy(identity);
-
-  if (policyMode === "shadow") {
-    const binary = new ScopedGongClient(identity, role);
-    return {
-      client: shadowGongClient(binary, identity, role, policy.degraded ? null : policy),
-      access: role === "admin"
-        ? "admin (org-wide data)"
-        : "member — calls and stats are limited to your own activity",
-    };
-  }
-
-  const profileNames = [...policy.perWorkspace.values()].map((ws) => ws.profileName).join("; ");
-  return {
-    client: new PolicyGongClient(identity, policy),
-    access: policy.degraded
-      ? "member (fallback) — your Gong permission profile could not be resolved, so access is limited to your own activity"
-      : `mirrors your Gong permission profile (${profileNames})`,
-  };
-}
 
 // ── Per-session state ─────────────────────────────────────────────────────────
 
@@ -157,13 +101,14 @@ function buildServer(identity: GongIdentity, client: GongClient, access: string)
   );
 
   registerCallTools(server, client);
+  registerDiscoveryTools(server, client, identity);
   registerUserTools(server, client);
   registerStatsTools(server, client);
   registerEntityTools(server, client);
-  registerSettingsTools(server, client);
+  registerSettingsTools(server, client, identity);
   registerLibraryTools(server, client);
   registerCrmTools(server, client);
-  registerFlowTools(server, client);
+  registerFlowTools(server, client, identity);
   registerMeetingTools(server, client);
   registerPermissionTools(server, client);
   registerDataPrivacyTools(server, client);
@@ -236,7 +181,7 @@ app.post("/mcp", bearer, async (req, res) => {
     }
 
     const role: GatewayRole = config.adminEmails.has(email) ? "admin" : "member";
-    const { client, access } = await buildSessionClient(identity, role);
+    const { client, access } = await buildSessionClient(identity, role, policyMode, permissionResolver);
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: () => randomUUID(),
       onsessioninitialized: (id) => {

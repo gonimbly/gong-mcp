@@ -23,8 +23,64 @@ npm run smoke:policy -- caio.pereira@gonimbly.com
 Credentials: either `GONG_ACCESS_KEY`/`GONG_ACCESS_KEY_SECRET`/`GONG_BASE_URL`
 env vars, or a keychain OAuth token from a prior `gong_login` (local dev).
 
-Run it for each persona in `docs/phase3a-discovery.md` before flipping
-`GONG_POLICY_MODE=profiles` (phase 3e), and again whenever the resolver or
-policy client changes. It exists because live APIs disagree with fakes:
+Run it for each persona in `docs/phase3a-discovery.md` whenever the resolver
+or policy client changes (`profiles` is the live default since 2026-06-12, so
+these checks now guard a production access model). It exists because live APIs
+disagree with fakes:
 on 2026-06-11 it caught `/v2/users/extensive` rejecting the bare `{}` body
 our unit-test fake accepted, which silently degraded every session.
+
+## find-calls-smoke.ts
+
+End-to-end verification of the call-discovery composite tools
+(`src/gong/discovery.ts`) through a real `PolicyGongClient`: directory
+resolution, participant search with an independent raw-fetch cross-check of a
+result, account search seeded from live data, `my_calls` self-containment,
+summary compactness, and a before/after token-cost comparison of the composite
+output vs paging the raw extensive endpoint.
+
+```bash
+npm run smoke:find-calls                                        # default persona + "Nikki Mitchell"
+npm run smoke:find-calls -- nikki.mitchell@gonimbly.com "Iulyan"
+```
+
+Run it after changing the discovery engine, and for at least one persona with
+restricted call visibility to confirm policy composition (coverage counts must
+satisfy matched ≤ scanned ≤ raw total).
+
+## all-tools-probe.ts
+
+Full read-tool verification sweep: fires every read tool's request exactly as
+the tool layer builds it (chaining real call/user/folder/profile ids), and
+classifies each result as ✅ working, ⚠️ semantically blocked (license,
+feature flag, no data), or ❌ shape bug. Write tools are reviewed statically,
+never fired. Run after changing any client method or tool schema; the goal is
+zero ❌.
+
+```bash
+npm run probe:all-tools
+```
+
+## stats-coaching-probe.ts
+
+One-shot probe of the stats + coaching endpoints, written when production
+surfaced permanent 400s on 2026-06-12: date-only vs datetime expectations per
+endpoint, the top-level `aggregationPeriod` field, and `/v2/coaching`'s
+kebab-case `workspace-id`/`manager-id`/`from`/`to` contract. Re-run before
+changing any stats/coaching request shape.
+
+```bash
+npm run probe:stats-coaching
+```
+
+## extensive-filter-probe.ts
+
+One-shot probe of `/v2/calls/extensive` capabilities: `primaryUserIds` filter
+support, `contentSelector.context: "Extended"` CRM shape and coverage, party
+field shapes, deep-link presence, and missing/empty-filter strictness. Findings
+are recorded in `docs/backlog-call-discovery-tools.md` — re-run it before
+relying on a new request shape, and update that doc if Gong's behavior changes.
+
+```bash
+npm run probe:extensive-filter
+```
