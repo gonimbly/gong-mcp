@@ -1,5 +1,6 @@
 import { loadTokens, saveTokens, hasLegacyCredentials, type OAuthTokens } from "./tokenStore.js";
 import { refreshAccessToken } from "./oauth.js";
+import { quotaTracker } from "./quota.js";
 
 export class GongClient {
   private readonly baseUrl: string;
@@ -56,6 +57,13 @@ export class GongClient {
   }
 
   private async request<T>(path: string, options: RequestInit = {}): Promise<T> {
+    if (quotaTracker.isOverLimit()) {
+      throw new Error(
+        "GONG API daily quota of 50,000 requests has been reached. " +
+        "Quota resets at midnight UTC — please try again tomorrow."
+      );
+    }
+
     const url = `${this.baseUrl}${path}`;
     const response = await fetch(url, {
       ...options,
@@ -82,6 +90,7 @@ export class GongClient {
       throw new Error(`Gong API error ${response.status}: ${text}`);
     }
 
+    quotaTracker.increment();
     return response.json() as Promise<T>;
   }
 
