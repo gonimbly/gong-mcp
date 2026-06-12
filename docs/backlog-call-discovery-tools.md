@@ -165,6 +165,25 @@ keychain OAuth credential:
    userId, anywhere parties are matched.
 6. Org credential requires the regional `GONG_BASE_URL` (e.g.
    `us-32447.api.gong.io`); the keychain OAuth token works on the default.
+7. Full-surface findings from the 2026-06-12 all-tools sweep
+   (`npm run probe:all-tools` — every read endpoint fired live, write
+   endpoints never fired):
+   - `/v2/entities/ask-entity` + `get-brief`: `crmEntityType` (NOT
+     `entityType`), values `ACCOUNT`/`DEAL` verified; `timePeriod` REQUIRED,
+     only `THIS_WEEK|THIS_MONTH|THIS_QUARTER|THIS_YEAR` — arbitrary
+     from/to ranges are not supported. `get-brief`'s `briefName` must match a
+     PUBLISHED brief template, else 404.
+   - `/v2/crm/*` reads: every call needs `integrationId` (a long) +
+     `objectType`; these only cover generic-CRM-API integrations — orgs on the
+     native Salesforce connector (like this one) have NONE registered.
+   - `/v2/flows` + `/v2/flows/folders`: require `flowOwnerEmail` /
+     `flowFolderOwnerEmail`; 403 without an Engage license.
+   - `/v2/logs`: `logType` required; `UserActivityLog` is the standard value.
+   - `/v2/library/folders`: 400s bare in a multi-workspace org — pass
+     `workspaceId` (camelCase, unlike coaching's kebab params).
+   - `/v2/all-permission-profiles`: `workspaceId` required.
+   - `/v2/data-privacy/data-for-email-address`: rejects INTERNAL user emails —
+     external participants only.
 
 ## Testing
 

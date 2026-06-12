@@ -5,9 +5,11 @@ import type { GongClient } from "../gong/client.js";
 export function registerDataPrivacyTools(server: McpServer, client: GongClient) {
   server.tool(
     "gong_get_data_for_email",
-    "Look up all Gong data associated with an email address (calls, transcripts, user records). Used for GDPR/CCPA data subject requests.",
+    "Look up all Gong data associated with an EXTERNAL person's email address (calls, emails, meetings). " +
+      "Used for GDPR/CCPA data subject requests. The API rejects internal Gong users' emails — this is for " +
+      "third-party privacy lookups only.",
     {
-      emailAddress: z.string().email().describe("The email address to look up"),
+      emailAddress: z.string().email().describe("The external person's email address to look up"),
     },
     async (args) => {
       const data = await client.getDataForEmail(args.emailAddress);

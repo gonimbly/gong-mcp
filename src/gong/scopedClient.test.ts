@@ -151,9 +151,9 @@ describe("self-scoped stats", () => {
 describe("admin-only tools", () => {
   const denied: Array<[string, () => unknown]> = [
     ["audit logs", () => member.getLogs()],
-    ["AI ask account", () => member.askAccount({ workspaceId: "w", crmAccountId: "a", fromDateTime: "f", toDateTime: "t", question: "q" })],
-    ["AI ask deal", () => member.askDeal({ workspaceId: "w", crmDealId: "d", fromDateTime: "f", toDateTime: "t", question: "q" })],
-    ["AI brief", () => member.generateBrief({ workspaceId: "w", briefName: "b", entityType: "ACCOUNT", crmEntityId: "e", periodType: "p", fromDateTime: "f", toDateTime: "t" })],
+    ["AI ask account", () => member.askAccount({ workspaceId: "w", crmAccountId: "a", timePeriod: "THIS_MONTH", question: "q" })],
+    ["AI ask deal", () => member.askDeal({ workspaceId: "w", crmDealId: "d", timePeriod: "THIS_MONTH", question: "q" })],
+    ["AI brief", () => member.generateBrief({ workspaceId: "w", briefName: "b", crmEntityType: "ACCOUNT", crmEntityId: "e", timePeriod: "THIS_MONTH" })],
     ["data privacy read", () => member.getDataForEmail("x@y.com")],
     ["data erasure", () => member.eraseDataForEmail("x@y.com")],
     ["permission profiles", () => member.listAllPermissionProfiles()],
@@ -176,7 +176,7 @@ describe("admin-only tools", () => {
   }
 
   test("admin passes through on admin-only tools", async () => {
-    await admin.getLogs();
+    await admin.getLogs({ logType: "UserActivityLog" });
     await admin.getDataForEmail("x@y.com");
     await admin.listAllPermissionProfiles();
     assert.equal(requests.length, 3);
@@ -190,7 +190,7 @@ describe("open tools", () => {
     await member.listScorecards();
     await member.listTrackers();
     await member.listLibraryFolders();
-    await member.listFlows();
+    await member.listFlows({ flowOwnerEmail: MEMBER_IDENTITY.email });
     assert.equal(requests.length, 6);
   });
 });

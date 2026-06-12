@@ -1,6 +1,12 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { GongClient } from "../gong/client.js";
+import { defaultWorkspaceId } from "./workspace.js";
+
+// The ask-entity/get-brief endpoints only support these fixed windows —
+// arbitrary date ranges are rejected (verified live 2026-06-12).
+const timePeriod = z.enum(["THIS_WEEK", "THIS_MONTH", "THIS_QUARTER", "THIS_YEAR"]).optional()
+  .describe("Analysis window — one of the four supported periods (default THIS_MONTH; arbitrary date ranges are NOT supported)");
 
 export function registerEntityTools(server: McpServer, client: GongClient) {
   server.tool(
@@ -11,14 +17,18 @@ export function registerEntityTools(server: McpServer, client: GongClient) {
       "Do NOT use for: cross-account analytics, fetching raw transcripts, or multi-category structured overviews — use gong_generate_brief for those.",
     ].join(" "),
     {
-      workspaceId: z.string().describe("Gong workspace ID (found in Admin Center > Company > Workspaces, in the URL)"),
-      crmAccountId: z.string().describe("CRM account ID (e.g. Salesforce Account ID)"),
-      fromDateTime: z.string().describe("ISO 8601 start of the analysis window, e.g. 2024-01-01T00:00:00Z"),
-      toDateTime: z.string().describe("ISO 8601 end of the analysis window, e.g. 2024-03-31T23:59:59Z"),
+      workspaceId: z.string().optional().describe("Gong workspace ID (auto-resolved when the org has exactly one)"),
+      crmAccountId: z.string().describe("CRM account ID (e.g. Salesforce Account ID — find it on a call via gong_find_calls account context or gong_call_summary)"),
+      timePeriod,
       question: z.string().describe('Natural-language question, e.g. "What are the main objections raised by the prospect?"'),
     },
     async (args) => {
-      const data = await client.askAccount(args);
+      const data = await client.askAccount({
+        workspaceId: args.workspaceId ?? await defaultWorkspaceId(client),
+        crmAccountId: args.crmAccountId,
+        timePeriod: args.timePeriod ?? "THIS_MONTH",
+        question: args.question,
+      });
       return { content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] };
     }
   );
@@ -31,14 +41,18 @@ export function registerEntityTools(server: McpServer, client: GongClient) {
       "Do NOT use for: cross-deal analytics, raw activity lists, or broad summaries — use gong_generate_brief for those.",
     ].join(" "),
     {
-      workspaceId: z.string().describe("Gong workspace ID (found in Admin Center > Company > Workspaces, in the URL)"),
+      workspaceId: z.string().optional().describe("Gong workspace ID (auto-resolved when the org has exactly one)"),
       crmDealId: z.string().describe("CRM deal/opportunity ID (e.g. Salesforce Opportunity ID)"),
-      fromDateTime: z.string().describe("ISO 8601 start of the analysis window"),
-      toDateTime: z.string().describe("ISO 8601 end of the analysis window"),
+      timePeriod,
       question: z.string().describe('Natural-language question, e.g. "What are the main blockers preventing this deal from closing?"'),
     },
     async (args) => {
-      const data = await client.askDeal(args);
+      const data = await client.askDeal({
+        workspaceId: args.workspaceId ?? await defaultWorkspaceId(client),
+        crmDealId: args.crmDealId,
+        timePeriod: args.timePeriod ?? "THIS_MONTH",
+        question: args.question,
+      });
       return { content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] };
     }
   );
@@ -46,21 +60,26 @@ export function registerEntityTools(server: McpServer, client: GongClient) {
   server.tool(
     "gong_generate_brief",
     [
-      "Generate a comprehensive, multi-category structured summary for an account, deal, or contact — covering themes, stakeholders, and risks.",
+      "Generate a comprehensive, multi-category structured summary for an account, deal, contact, or lead — covering themes, stakeholders, and risks.",
       "Use for: account or deal reviews, executive briefings, handover documents.",
       "Do NOT use for: answering a targeted question — use gong_ask_account or gong_ask_deal for that.",
+      "The brief template must already be PUBLISHED in Gong (Settings → Briefs); the API rejects unknown names.",
     ].join(" "),
     {
-      workspaceId: z.string().describe("Gong workspace ID"),
-      briefName: z.string().describe('Label for this brief, e.g. "Q1 Account Review" or "Pre-call Prep"'),
-      entityType: z.enum(["ACCOUNT", "DEAL", "CONTACT"]).describe("Type of CRM entity"),
+      workspaceId: z.string().optional().describe("Gong workspace ID (auto-resolved when the org has exactly one)"),
+      briefName: z.string().describe("Name of a PUBLISHED brief template configured in Gong — not a free-text label"),
+      crmEntityType: z.enum(["ACCOUNT", "DEAL", "CONTACT", "LEAD"]).describe("Type of CRM entity"),
       crmEntityId: z.string().describe("CRM entity ID (account, deal, or contact ID from your CRM)"),
-      periodType: z.string().describe('Period granularity, e.g. "LAST_30_DAYS", "LAST_90_DAYS", or "CUSTOM" (use CUSTOM with fromDateTime/toDateTime)'),
-      fromDateTime: z.string().describe("ISO 8601 start date (used when periodType is CUSTOM)"),
-      toDateTime: z.string().describe("ISO 8601 end date (used when periodType is CUSTOM)"),
+      timePeriod,
     },
     async (args) => {
-      const data = await client.generateBrief(args);
+      const data = await client.generateBrief({
+        workspaceId: args.workspaceId ?? await defaultWorkspaceId(client),
+        briefName: args.briefName,
+        crmEntityType: args.crmEntityType,
+        crmEntityId: args.crmEntityId,
+        timePeriod: args.timePeriod ?? "THIS_MONTH",
+      });
       return { content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] };
     }
   );

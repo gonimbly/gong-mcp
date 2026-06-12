@@ -21,7 +21,8 @@
     "probe:stats-coaching": "tsx tests/manual/stats-coaching-probe.ts",
     "postbuild": "chmod +x dist/index.js dist/setup.js",
     "prepare": "npm run build",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "npm run build",
+    "probe:all-tools": "tsx tests/manual/all-tools-probe.ts"
   },
   "files": [
     "dist/",

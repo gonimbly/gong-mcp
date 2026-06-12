@@ -48,6 +48,19 @@ Run it after changing the discovery engine, and for at least one persona with
 restricted call visibility to confirm policy composition (coverage counts must
 satisfy matched ≤ scanned ≤ raw total).
 
+## all-tools-probe.ts
+
+Full read-tool verification sweep: fires every read tool's request exactly as
+the tool layer builds it (chaining real call/user/folder/profile ids), and
+classifies each result as ✅ working, ⚠️ semantically blocked (license,
+feature flag, no data), or ❌ shape bug. Write tools are reviewed statically,
+never fired. Run after changing any client method or tool schema; the goal is
+zero ❌.
+
+```bash
+npm run probe:all-tools
+```
+
 ## stats-coaching-probe.ts
 
 One-shot probe of the stats + coaching endpoints, written when production

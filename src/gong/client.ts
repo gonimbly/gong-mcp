@@ -184,21 +184,23 @@ export class GongClient {
   }
 
   // ── Entities (AI) ────────────────────────────────────────────────────────
+  // Live-verified 2026-06-12: both endpoints take crmEntityType (ACCOUNT |
+  // DEAL) and a REQUIRED timePeriod enum (THIS_WEEK | THIS_MONTH |
+  // THIS_QUARTER | THIS_YEAR) — arbitrary fromDateTime/toDateTime ranges are
+  // not supported.
 
   askAccount(params: {
     workspaceId: string;
     crmAccountId: string;
-    fromDateTime: string;
-    toDateTime: string;
+    timePeriod: string;
     question: string;
   }) {
     return this.request(
       `/v2/entities/ask-entity${this.qs({
         workspaceId: params.workspaceId,
-        entityType: "Account",
+        crmEntityType: "ACCOUNT",
         crmEntityId: params.crmAccountId,
-        fromDateTime: params.fromDateTime,
-        toDateTime: params.toDateTime,
+        timePeriod: params.timePeriod,
         question: params.question,
       })}`
     );
@@ -207,30 +209,28 @@ export class GongClient {
   askDeal(params: {
     workspaceId: string;
     crmDealId: string;
-    fromDateTime: string;
-    toDateTime: string;
+    timePeriod: string;
     question: string;
   }) {
     return this.request(
       `/v2/entities/ask-entity${this.qs({
         workspaceId: params.workspaceId,
-        entityType: "Opportunity",
+        crmEntityType: "DEAL",
         crmEntityId: params.crmDealId,
-        fromDateTime: params.fromDateTime,
-        toDateTime: params.toDateTime,
+        timePeriod: params.timePeriod,
         question: params.question,
       })}`
     );
   }
 
+  /** `briefName` must match a PUBLISHED brief template in Gong (the API 404s
+   * otherwise — "Brief not found - could be that the brief is not published"). */
   generateBrief(params: {
     workspaceId: string;
     briefName: string;
-    entityType: "ACCOUNT" | "DEAL" | "CONTACT";
+    crmEntityType: "ACCOUNT" | "DEAL" | "CONTACT" | "LEAD";
     crmEntityId: string;
-    periodType: string;
-    fromDateTime: string;
-    toDateTime: string;
+    timePeriod: string;
   }) {
     return this.request(`/v2/entities/get-brief${this.qs(params)}`);
   }
@@ -251,8 +251,9 @@ export class GongClient {
 
   // ── Library ──────────────────────────────────────────────────────────────
 
-  listLibraryFolders() {
-    return this.request("/v2/library/folders");
+  /** In a multi-workspace org the bare endpoint 400s — pass a workspaceId. */
+  listLibraryFolders(workspaceId?: string) {
+    return this.request(`/v2/library/folders${this.qs({ workspaceId })}`);
   }
 
   getLibraryFolderContent(folderId: string, cursor?: string) {
@@ -260,8 +261,11 @@ export class GongClient {
   }
 
   // ── CRM ──────────────────────────────────────────────────────────────────
+  // These cover integrations registered through the generic CRM API (an
+  // `integrationId` long is required everywhere) — NOT native connectors like
+  // the built-in Salesforce sync. Verified live 2026-06-12.
 
-  getCrmEntities(params: { crmObjectType: string; fromDateTime?: string; cursor?: string }) {
+  getCrmEntities(params: { integrationId: string; objectType: string; objectIds?: string[]; cursor?: string }) {
     return this.request(`/v2/crm/entities${this.qs(params)}`);
   }
 
@@ -269,8 +273,8 @@ export class GongClient {
     return this.request("/v2/crm/entities", { method: "POST", body: JSON.stringify(body) });
   }
 
-  getCrmEntitySchema(crmObjectType: string) {
-    return this.request(`/v2/crm/entity-schema${this.qs({ crmObjectType })}`);
+  getCrmEntitySchema(params: { integrationId: string; objectType: string }) {
+    return this.request(`/v2/crm/entity-schema${this.qs(params)}`);
   }
 
   setCrmEntitySchema(body: unknown) {
@@ -289,14 +293,16 @@ export class GongClient {
     return this.request("/v2/crm/integrations", { method: "DELETE" });
   }
 
-  getCrmRequestStatus(requestId: string) {
-    return this.request(`/v2/crm/request-status${this.qs({ requestId })}`);
+  getCrmRequestStatus(params: { integrationId: string; clientRequestId: string }) {
+    return this.request(`/v2/crm/request-status${this.qs(params)}`);
   }
 
   // ── Logs ─────────────────────────────────────────────────────────────────
 
-  getLogs(params?: { fromDateTime?: string; toDateTime?: string; cursor?: string }) {
-    return this.request(`/v2/logs${this.qs(params ?? {})}`);
+  /** `logType` is required by the API; "UserActivityLog" is the standard
+   * audit log (verified live 2026-06-12). */
+  getLogs(params: { logType: string; fromDateTime?: string; toDateTime?: string; cursor?: string }) {
+    return this.request(`/v2/logs${this.qs(params)}`);
   }
 
   // ── Meetings ─────────────────────────────────────────────────────────────
@@ -352,13 +358,15 @@ export class GongClient {
   }
 
   // ── Flows ────────────────────────────────────────────────────────────────
+  // Both list endpoints require the owner's email (verified live 2026-06-12)
+  // and 403 when that user has no Gong Engage license.
 
-  listFlows(workspaceId?: string) {
-    return this.request(`/v2/flows${this.qs({ workspaceId })}`);
+  listFlows(params: { flowOwnerEmail: string; workspaceId?: string; cursor?: string }) {
+    return this.request(`/v2/flows${this.qs(params)}`);
   }
 
-  listFlowFolders(workspaceId?: string) {
-    return this.request(`/v2/flows/folders${this.qs({ workspaceId })}`);
+  listFlowFolders(params: { flowFolderOwnerEmail: string; workspaceId?: string; cursor?: string }) {
+    return this.request(`/v2/flows/folders${this.qs(params)}`);
   }
 
   addProspectsToFlow(body: unknown) {

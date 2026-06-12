@@ -283,9 +283,9 @@ export class PolicyGongClient extends GongClient {
     return [...this.policy.perWorkspace.values()].map((ws) => ws.library);
   }
 
-  override listLibraryFolders() {
+  override listLibraryFolders(workspaceId?: string) {
     if (this.libraryLevels().every((l) => l.level === "none")) this.deny("the call library");
-    return super.listLibraryFolders();
+    return super.listLibraryFolders(workspaceId);
   }
 
   override getLibraryFolderContent(folderId: string, cursor?: string) {
@@ -306,19 +306,19 @@ export class PolicyGongClient extends GongClient {
     if (!open) this.deny(what);
   }
 
-  override getCrmEntities(params: { crmObjectType: string; fromDateTime?: string; cursor?: string }) {
+  override getCrmEntities(params: Parameters<GongClient["getCrmEntities"]>[0]) {
     this.requireDealsRead("CRM data");
     return super.getCrmEntities(params);
   }
 
-  override getCrmEntitySchema(crmObjectType: string) {
+  override getCrmEntitySchema(params: Parameters<GongClient["getCrmEntitySchema"]>[0]) {
     this.requireDealsRead("CRM data");
-    return super.getCrmEntitySchema(crmObjectType);
+    return super.getCrmEntitySchema(params);
   }
 
-  override getCrmRequestStatus(requestId: string) {
+  override getCrmRequestStatus(params: Parameters<GongClient["getCrmRequestStatus"]>[0]) {
     this.requireDealsRead("CRM data");
-    return super.getCrmRequestStatus(requestId);
+    return super.getCrmRequestStatus(params);
   }
 
   override upsertCrmEntities(body: unknown) {
@@ -442,7 +442,7 @@ export class PolicyGongClient extends GongClient {
     return super.eraseDataForPhone(phoneNumber);
   }
 
-  override getLogs(params?: { fromDateTime?: string; toDateTime?: string; cursor?: string }) {
+  override getLogs(params: Parameters<GongClient["getLogs"]>[0]) {
     this.requireCapability("techAdmin", "audit logs");
     return super.getLogs(params);
   }

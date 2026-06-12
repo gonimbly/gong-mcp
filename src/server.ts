@@ -108,7 +108,7 @@ function buildServer(identity: GongIdentity, client: GongClient, access: string)
   registerSettingsTools(server, client, identity);
   registerLibraryTools(server, client);
   registerCrmTools(server, client);
-  registerFlowTools(server, client);
+  registerFlowTools(server, client, identity);
   registerMeetingTools(server, client);
   registerPermissionTools(server, client);
   registerDataPrivacyTools(server, client);

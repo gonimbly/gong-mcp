@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { GongClient } from "../gong/client.js";
 import type { GongIdentity } from "../gong/identity.js";
+import { defaultWorkspaceId } from "./workspace.js";
 
 const DAY_MS = 86400_000;
 
@@ -9,16 +10,6 @@ const DAY_MS = 86400_000;
 function coachingDateTime(value: string | undefined, fallbackMs: number): string {
   if (!value) return new Date(fallbackMs).toISOString();
   return /^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value}T00:00:00Z` : value;
-}
-
-/** Resolve the workspace when the caller didn't pass one: unambiguous for a
- * single-workspace org, otherwise an error that lists the real choices. */
-async function defaultWorkspaceId(client: GongClient): Promise<string> {
-  const { workspaces } = await client.listWorkspaces() as { workspaces?: Array<{ id?: string; name?: string }> };
-  const all = (workspaces ?? []).filter((w) => w.id != null);
-  if (all.length === 1) return String(all[0].id);
-  const list = all.map((w) => `"${w.name}"=${w.id}`).join(", ");
-  throw new Error(`workspaceId is required — this org has ${all.length} workspaces: ${list}`);
 }
 
 export function registerSettingsTools(server: McpServer, client: GongClient, identity?: GongIdentity) {

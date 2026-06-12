@@ -221,7 +221,7 @@ describe("stats scoping", () => {
 });
 
 describe("AI synthesis requires unrestricted call access in the workspace", () => {
-  const aiParams = { workspaceId: WS1, crmAccountId: "a", crmDealId: "d", fromDateTime: "f", toDateTime: "t", question: "q" };
+  const aiParams = { workspaceId: WS1, crmAccountId: "a", crmDealId: "d", timePeriod: "THIS_MONTH", question: "q" };
 
   test("granted for an all-calls profile", async () => {
     await exec.askAccount(aiParams);
@@ -233,7 +233,7 @@ describe("AI synthesis requires unrestricted call access in the workspace", () =
     await assert.rejects(async () => manager.askAccount(aiParams), AccessDeniedError);
     await assert.rejects(async () => manager.askDeal(aiParams), AccessDeniedError);
     await assert.rejects(
-      async () => manager.generateBrief({ workspaceId: WS1, briefName: "b", entityType: "ACCOUNT", crmEntityId: "e", periodType: "p", fromDateTime: "f", toDateTime: "t" }),
+      async () => manager.generateBrief({ workspaceId: WS1, briefName: "b", crmEntityType: "ACCOUNT", crmEntityId: "e", timePeriod: "THIS_MONTH" }),
       AccessDeniedError
     );
     assert.equal(requests.length, 0);
@@ -292,7 +292,7 @@ describe("CRM, deals and the admin surface", () => {
       await assert.rejects(async () => op(), AccessDeniedError);
     }
     assert.equal(requests.length, 0);
-    await exec.getLogs();
+    await exec.getLogs({ logType: "UserActivityLog" });
     await exec.listAllPermissionProfiles();
     assert.equal(requests.length, 2);
   });

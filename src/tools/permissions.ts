@@ -1,17 +1,27 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { GongClient } from "../gong/client.js";
+import { listWorkspaceRefs } from "./workspace.js";
 
 export function registerPermissionTools(server: McpServer, client: GongClient) {
   server.tool(
     "gong_list_permission_profiles",
-    "List all permission profiles defined in the Gong workspace.",
+    "List permission profiles. Covers every workspace unless workspaceId is given (the API requires a " +
+      "workspace, so the tool sweeps all of them by default).",
     {
-      workspaceId: z.string().optional().describe("Filter by workspace ID"),
+      workspaceId: z.string().optional().describe("Restrict to one workspace (default: all workspaces, labeled)"),
     },
     async (args) => {
-      const data = await client.listAllPermissionProfiles(args.workspaceId);
-      return { content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] };
+      const targets = args.workspaceId
+        ? [{ id: args.workspaceId, name: undefined as string | undefined }]
+        : await listWorkspaceRefs(client);
+      const perWorkspace = [];
+      for (const ws of targets) {
+        const data = await client.listAllPermissionProfiles(ws.id) as { profiles?: unknown[] };
+        perWorkspace.push({ workspaceId: ws.id, workspaceName: ws.name, profiles: data.profiles ?? [] });
+      }
+      const payload = args.workspaceId ? perWorkspace[0] : { workspaces: perWorkspace };
+      return { content: [{ type: "text" as const, text: JSON.stringify(payload, null, 2) }] };
     }
   );
 

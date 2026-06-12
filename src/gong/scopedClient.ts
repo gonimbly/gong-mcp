@@ -409,7 +409,7 @@ export class ScopedGongClient extends GongClient {
     return super.eraseDataForPhone(phoneNumber);
   }
 
-  override getLogs(params?: { fromDateTime?: string; toDateTime?: string; cursor?: string }) {
+  override getLogs(params: Parameters<GongClient["getLogs"]>[0]) {
     this.requireAdmin("audit logs");
     return super.getLogs(params);
   }
