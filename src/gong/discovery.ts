@@ -30,6 +30,9 @@ export interface ExtensiveParty {
   /** "Internal" | "External" | "Unknown" on the live API. */
   affiliation?: string;
   title?: string;
+  /** Crosswalk to transcript monologues. Present only for parties who spoke;
+   * matches the `speakerId` on /v2/calls/transcript records. See transcripts.ts. */
+  speakerId?: string | number;
 }
 
 interface CrmField { name?: string; value?: unknown }
@@ -267,7 +270,7 @@ export interface FindCallsOptions {
 // Gong 404s ("No calls found corresponding to the provided filters") on a
 // valid filter with zero matches — that is an empty result, not an error. The
 // text check distinguishes it from other 404s (e.g. a misconfigured base URL).
-function isNoCallsFound(err: unknown): boolean {
+export function isNoCallsFound(err: unknown): boolean {
   return err instanceof GongApiError && err.status === 404 && /No calls found/i.test(err.message);
 }
 

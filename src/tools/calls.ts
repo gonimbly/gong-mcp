@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { GongClient } from "../gong/client.js";
+import { attributeTranscripts } from "../gong/transcripts.js";
 
 export function registerCallTools(server: McpServer, client: GongClient) {
   server.tool(
@@ -32,12 +33,12 @@ export function registerCallTools(server: McpServer, client: GongClient) {
 
   server.tool(
     "gong_get_transcripts",
-    "Get speaker-attributed, timestamped transcripts for one or more Gong calls.",
+    "Get speaker-attributed, timestamped transcripts for one or more Gong calls. Each monologue carries the resolved speaker name and affiliation; a per-call `speakers` map gives the full identity (email, userId, title) for every speaker, including external participants.",
     {
       callIds: z.array(z.string()).describe("List of Gong call IDs (up to 100)"),
     },
     async (args) => {
-      const data = await client.getCallTranscripts(args.callIds);
+      const data = await attributeTranscripts(client, args.callIds);
       return { content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] };
     }
   );
