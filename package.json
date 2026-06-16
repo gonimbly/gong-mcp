@@ -19,6 +19,7 @@
     "smoke:find-calls": "tsx tests/manual/find-calls-smoke.ts",
     "probe:extensive-filter": "tsx tests/manual/extensive-filter-probe.ts",
     "probe:stats-coaching": "tsx tests/manual/stats-coaching-probe.ts",
+    "probe:transcript-attribution": "tsx tests/manual/transcript-attribution-probe.ts",
     "postbuild": "chmod +x dist/index.js dist/setup.js",
     "prepare": "npm run build",
     "prepublishOnly": "npm run build",

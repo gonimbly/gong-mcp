@@ -33,6 +33,7 @@ import { registerMeetingTools } from "./tools/meetings.js";
 import { registerPermissionTools } from "./tools/permissions.js";
 import { registerDataPrivacyTools } from "./tools/dataprivacy.js";
 import { registerLogTools } from "./tools/logs.js";
+import { SERVER_VERSION, buildLabel } from "./utils/buildInfo.js";
 import { sendSlackAlert } from "./utils/alert.js";
 
 const SESSION_IDLE_TTL_MS = 8 * 60 * 60 * 1000; // matches access-token lifetime
@@ -85,19 +86,20 @@ setInterval(() => {
 }, 60 * 60 * 1000).unref();
 
 function buildServer(identity: GongIdentity, client: GongClient, access: string): McpServer {
-  const server = new McpServer({ name: "gong-mcp", version: "0.5.0" });
+  const server = new McpServer({ name: "gong-mcp", version: SERVER_VERSION });
   // Every tool call in this session goes through the policy layer bound to this user
 
   server.tool(
     "gong_whoami",
-    "Show who is connected to the Gong MCP gateway, their Gong identity and access level.",
+    "Show who is connected to the Gong MCP gateway, their Gong identity and access level, and the deployed server build.",
     {},
     async () => ({
       content: [{
         type: "text" as const,
         text:
           `Connected as ${identity.email} (Gong user ${identity.userId}${identity.fullName ? `, ${identity.fullName}` : ""}). ` +
-          `Access level: ${access}.`,
+          `Access level: ${access}. ` +
+          `Build: ${buildLabel(process.env.RENDER_GIT_COMMIT)}.`,
       }],
     })
   );
@@ -135,7 +137,7 @@ app.use((req, res, next) => {
   next();
 });
 
-app.get("/healthz", (_req, res) => res.json({ ok: true }));
+app.get("/healthz", (_req, res) => res.json({ ok: true, build: buildLabel(process.env.RENDER_GIT_COMMIT) }));
 
 // OAuth authorization server endpoints (metadata, DCR, authorize, token)
 app.use(mcpAuthRouter({
