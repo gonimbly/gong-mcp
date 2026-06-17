@@ -6,6 +6,8 @@
  * gateway user's Gong identity and role:
  *
  *  - participant-checked  calls/transcripts: members only see calls they took part in
+ *  - owner-only           private calls: a call marked private in Gong is visible only
+ *                         to its owner (primaryUserId) — even admins are filtered
  *  - self-scoped          stats/coaching: the caller's Gong userId is forced into filters
  *  - admin-only           writes, AI synthesis, privacy, logs, permissions, integrations
  *  - open                 harmless metadata (workspaces, trackers, directory, library)
@@ -25,8 +27,15 @@ interface ExtensiveParty {
 }
 
 interface ExtensiveCall {
-  metaData?: { id?: string };
+  metaData?: { id?: string; isPrivate?: boolean; primaryUserId?: string | number };
   parties?: ExtensiveParty[];
+}
+
+/** Basic /v2/calls record — isPrivate/primaryUserId ride at the top level here. */
+interface BasicCall {
+  id?: string;
+  isPrivate?: boolean;
+  primaryUserId?: string | number;
 }
 
 interface ExtensiveCallsResponse {
@@ -71,6 +80,23 @@ export class ScopedGongClient extends GongClient {
     );
   }
 
+  /**
+   * Private calls are OWNER-ONLY: a Gong call marked private is visible solely to
+   * its owner (primaryUserId) — never to admins, managers, or other participants.
+   * The org credential returns private calls regardless, so we re-impose this.
+   */
+  private isHiddenPrivate(isPrivate: unknown, primaryUserId: unknown): boolean {
+    return isPrivate === true && String(primaryUserId ?? "") !== this.identity.userId;
+  }
+
+  /** Admins see every non-private call; members only ones they took part in; private is owner-only for both. */
+  private isVisibleCall(call: ExtensiveCall): boolean {
+    if (call.metaData?.isPrivate === true) {
+      return !this.isHiddenPrivate(true, call.metaData.primaryUserId);
+    }
+    return this.isAdmin || this.isParty(call);
+  }
+
   /** Force the caller's own Gong userId into a stats-style filter, overriding any input. */
   private selfScope<T extends { filter: Record<string, unknown> }>(body: T): T {
     return { ...body, filter: { ...body.filter, userIds: [this.identity.userId] } };
@@ -83,8 +109,8 @@ export class ScopedGongClient extends GongClient {
     };
   }
 
-  /** Which of these call IDs is the user a participant of? */
-  private async participatingCallIds(callIds: string[]): Promise<Set<string>> {
+  /** Which of these call IDs may the caller see (participation/admin + owner-only privacy)? */
+  private async visibleCallIds(callIds: string[]): Promise<Set<string>> {
     if (callIds.length === 0) return new Set();
     const data = await super.getExtensiveCalls({
       filter: { callIds },
@@ -93,7 +119,7 @@ export class ScopedGongClient extends GongClient {
     const allowed = new Set<string>();
     for (const call of data.calls ?? []) {
       const id = call.metaData?.id;
-      if (id && this.isParty(call)) allowed.add(String(id));
+      if (id && this.isVisibleCall(call)) allowed.add(String(id));
     }
     return allowed;
   }
@@ -101,14 +127,19 @@ export class ScopedGongClient extends GongClient {
   // ── Calls: participant-checked ─────────────────────────────────────────────
 
   override async listCalls(params?: { cursor?: string; fromDateTime?: string; toDateTime?: string; workspaceId?: string }) {
-    if (this.isAdmin) return super.listCalls(params);
+    if (this.isAdmin) {
+      // Admins see everything EXCEPT private calls they don't own (owner-only).
+      const data = await super.listCalls(params) as { calls?: BasicCall[] };
+      const calls = (data.calls ?? []).filter((c) => !this.isHiddenPrivate(c.isPrivate, c.primaryUserId));
+      return calls.length === (data.calls?.length ?? 0) ? data : { ...data, calls };
+    }
     const range = this.defaultRange(params?.fromDateTime, params?.toDateTime);
     const data = await super.getExtensiveCalls({
       filter: { ...range, ...(params?.workspaceId ? { workspaceId: params.workspaceId } : {}) },
       contentSelector: { exposedFields: { parties: true } },
       ...(params?.cursor ? { cursor: params.cursor } : {}),
     }) as ExtensiveCallsResponse;
-    const calls = (data.calls ?? []).filter((c) => this.isParty(c));
+    const calls = (data.calls ?? []).filter((c) => this.isVisibleCall(c));
     return {
       calls,
       records: data.records,
@@ -117,11 +148,11 @@ export class ScopedGongClient extends GongClient {
   }
 
   override async getCall(callId: string) {
-    if (this.isAdmin) return super.getCall(callId);
-    const allowed = await this.participatingCallIds([callId]);
+    // No admin shortcut: private calls are owner-only even for admins.
+    const allowed = await this.visibleCallIds([callId]);
     if (!allowed.has(String(callId))) {
       console.error(`[policy] DENY getCall ${callId} for ${this.identity.email}`);
-      throw new AccessDeniedError(`Access denied: you are not a participant of call ${callId}.`);
+      throw new AccessDeniedError(`Access denied: call ${callId} is private (owner-only) or you are not a participant.`);
     }
     return super.getCall(callId);
   }
@@ -131,7 +162,12 @@ export class ScopedGongClient extends GongClient {
     contentSelector?: Record<string, unknown>;
     cursor?: string;
   }) {
-    if (this.isAdmin) return super.getExtensiveCalls(body);
+    if (this.isAdmin) {
+      // Admins: passthrough EXCEPT private calls they don't own (owner-only).
+      const data = await super.getExtensiveCalls(body) as ExtensiveCallsResponse;
+      const calls = (data.calls ?? []).filter((c) => !this.isHiddenPrivate(c.metaData?.isPrivate, c.metaData?.primaryUserId));
+      return calls.length === (data.calls?.length ?? 0) ? data : { ...data, calls };
+    }
     const contentSelector = {
       ...(body.contentSelector ?? {}),
       exposedFields: {
@@ -142,20 +178,20 @@ export class ScopedGongClient extends GongClient {
     const data = await super.getExtensiveCalls({ ...body, contentSelector }) as ExtensiveCallsResponse;
     return {
       ...data,
-      calls: (data.calls ?? []).filter((c) => this.isParty(c)),
+      calls: (data.calls ?? []).filter((c) => this.isVisibleCall(c)),
       note: "Results are limited to calls you participated in.",
     };
   }
 
   override async getCallTranscripts(callIds: string[]) {
-    if (this.isAdmin) return super.getCallTranscripts(callIds);
-    const allowed = await this.participatingCallIds(callIds);
+    // No admin shortcut: a private call's transcript is owner-only too.
+    const allowed = await this.visibleCallIds(callIds);
     const denied = callIds.filter((id) => !allowed.has(String(id)));
     if (denied.length > 0) {
       console.error(`[policy] DENY transcripts ${denied.join(",")} for ${this.identity.email}`);
       throw new AccessDeniedError(
-        `Access denied: you are not a participant of call(s) ${denied.join(", ")}. ` +
-        `Transcripts are only available for calls you took part in.`
+        `Access denied: call(s) ${denied.join(", ")} are private (owner-only) or you are not a participant. ` +
+        `Transcripts are only available for calls you can access.`
       );
     }
     return super.getCallTranscripts(callIds);
