@@ -7,7 +7,13 @@
 import type { GongClient } from "./client.js";
 import { ScopedGongClient, type GatewayRole } from "./scopedClient.js";
 import { PolicyGongClient } from "./policyClient.js";
-import { degradedPolicy, type UserPolicy } from "./permissionResolver.js";
+import {
+  degradedPolicy,
+  summarizeWorkspaceAccess,
+  VISIBILITY_CAVEAT,
+  type UserPolicy,
+  type WorkspaceAccess,
+} from "./permissionResolver.js";
 import { shadowGongClient } from "./policyShadow.js";
 import type { GongIdentity } from "./identity.js";
 
@@ -44,20 +50,32 @@ async function resolveUserPolicy(resolver: PolicyResolver, identity: GongIdentit
   }
 }
 
+/**
+ * Structured access detail for the gateway's gong_whoami tool — lets a user see
+ * why their MCP call visibility may differ from the Gong UI. `headline` is the
+ * same string as `access`; `workspaces`/`note` are populated only in profiles mode.
+ */
+export interface AccessSummary {
+  headline: string;
+  mode: "admin" | "member" | "profiles" | "degraded";
+  workspaces?: WorkspaceAccess[];
+  note?: string;
+}
+
 export async function buildSessionClient(
   identity: GongIdentity,
   role: GatewayRole,
   policyMode: PolicyMode,
   resolver: PolicyResolver
-): Promise<{ client: GongClient; access: string }> {
+): Promise<{ client: GongClient; access: string; accessSummary: AccessSummary }> {
+  const binaryAccess = role === "admin"
+    ? "admin (org-wide data)"
+    : "member — calls and stats are limited to your own activity";
+  const binarySummary: AccessSummary = { headline: binaryAccess, mode: role === "admin" ? "admin" : "member" };
+
   // Break-glass admins keep org-wide passthrough in every mode
   if (policyMode === "binary" || (policyMode === "profiles" && role === "admin")) {
-    return {
-      client: new ScopedGongClient(identity, role),
-      access: role === "admin"
-        ? "admin (org-wide data)"
-        : "member — calls and stats are limited to your own activity",
-    };
+    return { client: new ScopedGongClient(identity, role), access: binaryAccess, accessSummary: binarySummary };
   }
 
   const policy = await resolveUserPolicy(resolver, identity);
@@ -66,17 +84,21 @@ export async function buildSessionClient(
     const binary = new ScopedGongClient(identity, role);
     return {
       client: shadowGongClient(binary, identity, role, policy.degraded ? null : policy),
-      access: role === "admin"
-        ? "admin (org-wide data)"
-        : "member — calls and stats are limited to your own activity",
+      access: binaryAccess,
+      accessSummary: binarySummary,
     };
   }
 
+  if (policy.degraded) {
+    const access = "member (fallback) — your Gong permission profile could not be resolved, so access is limited to your own activity";
+    return { client: new PolicyGongClient(identity, policy), access, accessSummary: { headline: access, mode: "degraded" } };
+  }
+
   const profileNames = [...policy.perWorkspace.values()].map((ws) => ws.profileName).join("; ");
+  const access = `mirrors your Gong permission profile (${profileNames})`;
   return {
     client: new PolicyGongClient(identity, policy),
-    access: policy.degraded
-      ? "member (fallback) — your Gong permission profile could not be resolved, so access is limited to your own activity"
-      : `mirrors your Gong permission profile (${profileNames})`,
+    access,
+    accessSummary: { headline: access, mode: "profiles", workspaces: summarizeWorkspaceAccess(policy), note: VISIBILITY_CAVEAT },
   };
 }

@@ -132,6 +132,30 @@ export function degradedPolicy(userId: string, email: string): UserPolicy {
   };
 }
 
+/** Per-workspace call-access summary for the gateway's gong_whoami tool. */
+export interface WorkspaceAccess {
+  workspaceId: string;
+  profileName: string;
+  callsAccess: PermissionLevel;
+  /** Number of Gong users whose calls are visible, or "unrestricted" for "all". */
+  visibleUserCount: number | "unrestricted";
+}
+
+/** Why MCP visibility can be narrower than the Gong UI — surfaced to users. */
+export const VISIBILITY_CAVEAT =
+  "Call visibility mirrors your Gong reporting-line permissions. Calls shared with you only via " +
+  "account/deal-team membership or one-off shares in the Gong UI may not appear here.";
+
+/** Project a resolved policy into the per-workspace call-access rows whoami shows. */
+export function summarizeWorkspaceAccess(policy: UserPolicy): WorkspaceAccess[] {
+  return [...policy.perWorkspace.values()].map((ws) => ({
+    workspaceId: ws.workspaceId,
+    profileName: ws.profileName,
+    callsAccess: ws.calls.level,
+    visibleUserCount: ws.calls.visibleUserIds === null ? "unrestricted" : ws.calls.visibleUserIds.size,
+  }));
+}
+
 export class PermissionResolver {
   private snapshot: Snapshot | null = null;
   private refreshPromise: Promise<Snapshot> | null = null;

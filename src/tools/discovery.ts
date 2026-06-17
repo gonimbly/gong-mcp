@@ -35,9 +35,10 @@ export function registerDiscoveryTools(server: McpServer, client: GongClient, id
       fromDateTime: z.string().optional().describe("ISO 8601 start (default: 30 days ago)"),
       toDateTime: z.string().optional().describe("ISO 8601 end (default: now)"),
       workspaceId: z.string().optional().describe("Restrict to one workspace"),
-      maxPages: z.number().int().min(1).max(10).optional().describe(
-        "API pages to scan, 100 calls each (default 5, max 10). Raise for wide date ranges; the coverage " +
-        "report says whether the scan was truncated."
+      maxPages: z.number().int().min(1).max(20).optional().describe(
+        "API page budget, 100 calls each (default 8, max 20). The scan covers the MOST RECENT calls " +
+        "first; on busy ranges the coverage report shows `scannedFrom` (oldest date examined) and " +
+        "`truncated` — raise maxPages or narrow the range to reach older calls."
       ),
     },
     async (args) => {
@@ -56,8 +57,8 @@ export function registerDiscoveryTools(server: McpServer, client: GongClient, id
         fromDateTime: z.string().optional().describe("ISO 8601 start (default: 30 days ago)"),
         toDateTime: z.string().optional().describe("ISO 8601 end (default: now)"),
         workspaceId: z.string().optional().describe("Restrict to one workspace"),
-        maxPages: z.number().int().min(1).max(10).optional().describe(
-          "API pages to scan, 100 calls each (default 5, max 10)"
+        maxPages: z.number().int().min(1).max(20).optional().describe(
+          "API page budget, 100 calls each (default 8, max 20); covers the most recent calls first"
         ),
       },
       async (args) => {

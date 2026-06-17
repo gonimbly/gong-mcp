@@ -18,7 +18,7 @@ import { GoogleOAuthProvider, loadGatewayConfig } from "./auth/googleProvider.js
 import { GongClient } from "./gong/client.js";
 import { type GatewayRole } from "./gong/scopedClient.js";
 import { PermissionResolver } from "./gong/permissionResolver.js";
-import { parsePolicyMode, buildSessionClient } from "./gong/sessionClient.js";
+import { parsePolicyMode, buildSessionClient, type AccessSummary } from "./gong/sessionClient.js";
 import { resolveGongIdentity, type GongIdentity } from "./gong/identity.js";
 import { registerCallTools } from "./tools/calls.js";
 import { registerDiscoveryTools } from "./tools/discovery.js";
@@ -85,23 +85,34 @@ setInterval(() => {
   }
 }, 60 * 60 * 1000).unref();
 
-function buildServer(identity: GongIdentity, client: GongClient, access: string): McpServer {
+function buildServer(identity: GongIdentity, client: GongClient, accessSummary: AccessSummary): McpServer {
   const server = new McpServer({ name: "gong-mcp", version: SERVER_VERSION });
   // Every tool call in this session goes through the policy layer bound to this user
 
   server.tool(
     "gong_whoami",
-    "Show who is connected to the Gong MCP gateway, their Gong identity and access level, and the deployed server build.",
+    "Show who is connected to the Gong MCP gateway, their Gong identity, their resolved call access " +
+      "per workspace, and the deployed server build. Use this to explain why MCP call results may " +
+      "differ from what the user sees in the Gong UI.",
     {},
-    async () => ({
-      content: [{
-        type: "text" as const,
-        text:
-          `Connected as ${identity.email} (Gong user ${identity.userId}${identity.fullName ? `, ${identity.fullName}` : ""}). ` +
-          `Access level: ${access}. ` +
-          `Build: ${buildLabel(process.env.RENDER_GIT_COMMIT)}.`,
-      }],
-    })
+    async () => {
+      const lines = [
+        `Connected as ${identity.email} (Gong user ${identity.userId}${identity.fullName ? `, ${identity.fullName}` : ""}).`,
+        `Access level: ${accessSummary.headline}.`,
+      ];
+      if (accessSummary.workspaces?.length) {
+        lines.push("Call access by workspace:");
+        for (const ws of accessSummary.workspaces) {
+          const scope = ws.visibleUserCount === "unrestricted"
+            ? "all calls in workspace"
+            : `${ws.visibleUserCount} users' calls visible`;
+          lines.push(`  • ${ws.profileName} (ws ${ws.workspaceId}): callsAccess=${ws.callsAccess} — ${scope}`);
+        }
+      }
+      if (accessSummary.note) lines.push(accessSummary.note);
+      lines.push(`Build: ${buildLabel(process.env.RENDER_GIT_COMMIT)}.`);
+      return { content: [{ type: "text" as const, text: lines.join("\n") }] };
+    }
   );
 
   registerCallTools(server, client);
@@ -185,7 +196,7 @@ app.post("/mcp", bearer, async (req, res) => {
     }
 
     const role: GatewayRole = config.adminEmails.has(email) ? "admin" : "member";
-    const { client, access } = await buildSessionClient(identity, role, policyMode, permissionResolver);
+    const { client, access, accessSummary } = await buildSessionClient(identity, role, policyMode, permissionResolver);
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: () => randomUUID(),
       onsessioninitialized: (id) => {
@@ -204,7 +215,7 @@ app.post("/mcp", bearer, async (req, res) => {
       if (transport.sessionId) sessions.delete(transport.sessionId);
     };
 
-    const server = buildServer(identity, client, access);
+    const server = buildServer(identity, client, accessSummary);
     await server.connect(transport);
     await transport.handleRequest(req, res, req.body);
   } catch (err) {
