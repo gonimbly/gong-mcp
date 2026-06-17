@@ -1,6 +1,6 @@
 {
   "name": "gong-mcp",
-  "version": "0.7.0",
+  "version": "1.0.0",
   "description": "Self-hosted MCP server for the Gong REST API",
   "main": "dist/index.js",
   "bin": {
