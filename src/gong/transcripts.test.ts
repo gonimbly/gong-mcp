@@ -195,12 +195,14 @@ describe("attributeTranscripts", () => {
 });
 
 describe("attributeTranscripts under policy", () => {
-  test("an unrestricted policy fetches parties exactly once (no double-fetch)", async () => {
+  test("an unrestricted policy runs the privacy/visibility gate, then attributes", async () => {
     const scoped = new PolicyGongClient(SELF as any, policy());
     const result = await attributeTranscripts(scoped, ["call-1"]);
     assert.equal(result.callTranscripts[0].transcript[0].speaker!.name, "Nikki Mitchell");
     assert.equal(transcriptRequests().length, 1);
-    assert.equal(extensiveRequests().length, 1);
+    // Two extensive POSTs: the owner-only private-call gate, then the roster fetch.
+    // (The gate now always runs so private calls can't leak via transcripts.)
+    assert.equal(extensiveRequests().length, 2);
   });
 
   test("a restricted policy denies a hidden call, failing closed before the roster fetch", async () => {
