@@ -114,6 +114,35 @@ describe("buildSessionClient", () => {
     assert.equal(resolver.calls, 1);
   });
 
+  test("profiles mode: accessSummary exposes per-workspace call access for whoami", async () => {
+    const policy = makePolicy(["Executive"]);
+    // Restrict ws1's call visibility to a 3-user set (managers-team shape).
+    policy.perWorkspace.get("ws1")!.calls = { level: "managers-team", visibleUserIds: new Set(["222", "501", "777"]) };
+    const { accessSummary } = await buildSessionClient(SELF, "member", "profiles", stubResolver(policy));
+    assert.equal(accessSummary.mode, "profiles");
+    assert.deepEqual(accessSummary.workspaces, [
+      { workspaceId: "ws1", profileName: "Executive", callsAccess: "managers-team", visibleUserCount: 3 },
+    ]);
+    assert.match(accessSummary.note ?? "", /account\/deal-team/);
+  });
+
+  test("unrestricted ('all') call access reports as unrestricted, no user count", async () => {
+    const { accessSummary } = await buildSessionClient(SELF, "member", "profiles", stubResolver(makePolicy(["Executive"])));
+    assert.equal(accessSummary.workspaces?.[0].visibleUserCount, "unrestricted");
+  });
+
+  test("admin / degraded carry a headline summary with no workspace rows", async () => {
+    const admin = await buildSessionClient(SELF, "admin", "binary", stubResolver(makePolicy(["X"])));
+    assert.equal(admin.accessSummary.mode, "admin");
+    assert.equal(admin.accessSummary.headline, admin.access);
+    assert.equal(admin.accessSummary.workspaces, undefined);
+
+    const degraded = await buildSessionClient(SELF, "member", "profiles", failingResolver);
+    assert.equal(degraded.accessSummary.mode, "degraded");
+    assert.equal(degraded.accessSummary.headline, degraded.access);
+    assert.equal(degraded.accessSummary.workspaces, undefined);
+  });
+
   test("profiles mode: resolver failure fails closed to the degraded policy", async () => {
     const { client, access } = await buildSessionClient(SELF, "member", "profiles", failingResolver);
     assert.ok(client instanceof PolicyGongClient);

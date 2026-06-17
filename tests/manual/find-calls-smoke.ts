@@ -115,22 +115,27 @@ if (found.calls.length === 0) {
     sample.url ?? "(missing url)");
 
   // ── 3. Account scan seeded from live data ───────────────────────────────────
-  const externalDomain = found.calls
-    .flatMap((c) => c.participants)
+  // Pick a specific source call carrying an external participant domain, then
+  // confirm an account search surfaces it. Scope to that call's own day so a
+  // high-volume domain (e.g. a vendor present on hundreds of calls) cannot crowd
+  // it past the 50-result display cap — this checks the matching contract, not
+  // the cap, and is independent of newest-first scan ordering.
+  const sourceCall = found.calls.find((c) =>
+    c.participants.some((p) => p.affiliation !== "Internal" && p.email?.includes("@")));
+  const externalDomain = sourceCall?.participants
     .find((p) => p.affiliation !== "Internal" && p.email?.includes("@"))
     ?.email?.split("@")[1];
-  if (externalDomain) {
-    console.log(`\n— gong_find_calls (account "${externalDomain}") —`);
-    const byAccount = await findCalls(scoped, { account: externalDomain, ...range });
-    const foundSameCall = byAccount.calls.some((c) =>
-      found.calls.some((f) => f.id === c.id &&
-        f.participants.some((p) => p.email?.endsWith(`@${externalDomain}`))));
-    const sourceCallIds = found.calls
-      .filter((c) => c.participants.some((p) => p.affiliation !== "Internal" && p.email?.endsWith(`@${externalDomain}`)))
-      .map((c) => c.id);
+  if (sourceCall && externalDomain) {
+    const day = sourceCall.started?.slice(0, 10);
+    const dayRange = day
+      ? { fromDateTime: `${day}T00:00:00.000Z`, toDateTime: `${day}T23:59:59.999Z` }
+      : range;
+    console.log(`\n— gong_find_calls (account "${externalDomain}", ${day ?? "14d"}) —`);
+    const byAccount = await findCalls(scoped, { account: externalDomain, ...dayRange });
     check("find_calls: account search finds the call its domain came from",
-      sourceCallIds.some((id) => byAccount.calls.some((c) => c.id === id)) || foundSameCall,
-      `${byAccount.coverage.matchedCalls} matches for "${externalDomain}"; bases: ${[...new Set(byAccount.calls.flatMap((c) => c.matchedOn))].join(", ")}`);
+      byAccount.calls.some((c) => c.id === sourceCall.id),
+      `${byAccount.coverage.matchedCalls} match(es) for "${externalDomain}" on ${day}; ` +
+      `bases: ${[...new Set(byAccount.calls.flatMap((c) => c.matchedOn))].join(", ")}`);
   } else {
     console.log("  (no external participant in results — skipping account cross-check)");
   }

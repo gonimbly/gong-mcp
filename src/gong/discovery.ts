@@ -18,7 +18,6 @@
  */
 import { GongApiError, type GongClient } from "./client.js";
 import type { GongIdentity } from "./identity.js";
-import { scanPages } from "./pagination.js";
 import { loadUserDirectory, matchDirectoryUsers } from "./directory.js";
 
 // ── API shapes (every accessor optional-chained — the live API is the contract) ──
@@ -208,10 +207,13 @@ export interface FindCallsResult {
     /** Matches before the display cap. */
     matchedCalls: number;
     pagesScanned: number;
-    /** True iff the scan stopped at maxPages with more pages remaining. */
+    /** True iff older calls in the range were left unscanned (budget exhausted). */
     truncated: boolean;
     /** The API's raw call count for the range, BEFORE policy filtering. */
     totalCallsInRange?: number;
+    /** Oldest call timestamp actually examined — the recency floor of this scan.
+     * Calls older than this in the requested range were NOT looked at. */
+    scannedFrom?: string;
   };
   participantResolution?: {
     query: string;
@@ -253,9 +255,14 @@ function toCompactCall(call: ExtensiveCallRecord, matchedOn: string[]): CompactC
 // ── Scan core ─────────────────────────────────────────────────────────────────
 
 const DEFAULT_LOOKBACK_DAYS = 30;
-const DEFAULT_MAX_PAGES = 5;
-const MAX_MAX_PAGES = 10;
+const DEFAULT_MAX_PAGES = 8;
+const MAX_MAX_PAGES = 20;
 const DISPLAY_CAP = 50;
+const PAGE_SIZE = 100;
+const DAY_MS = 86400_000;
+// Target calls per newest-first window: small enough that the window's own most
+// recent calls are captured before its per-window page cap (Gong pages oldest-first).
+const WINDOW_TARGET_CALLS = 400;
 
 export interface FindCallsOptions {
   participant?: string;
@@ -285,6 +292,143 @@ interface ScanSpec {
   withCrmContext: boolean;
 }
 
+interface RecentScan {
+  pages: ExtensiveCallsPage[];
+  pagesScanned: number;
+  /** True iff older calls in the range were left unscanned (budget exhausted). */
+  truncated: boolean;
+  /** API raw count for the full range, BEFORE policy filtering. */
+  totalRecords?: number;
+  /** Oldest call timestamp actually examined. */
+  scannedFrom?: string;
+}
+
+/**
+ * Scan /v2/calls/extensive NEWEST-first within [from, to], bounded by a page
+ * budget. The API pages oldest-first with forward-only cursors, so a naive scan
+ * spends the budget on the OLDEST calls and silently drops the most recent ones
+ * — the opposite of what "find this account's/person's calls" wants. When the
+ * range is busier than the budget, we walk it in fixed windows from the newest
+ * end backward, so the budget covers the most recent calls and truncation means
+ * "older calls not yet examined" (reported via scannedFrom).
+ */
+async function scanRecentFirst(
+  client: GongClient,
+  contentSelector: Record<string, unknown>,
+  spec: ScanSpec,
+): Promise<RecentScan> {
+  const filter = (fromISO: string, toISO: string) => ({
+    fromDateTime: fromISO,
+    toDateTime: toISO,
+    ...(spec.workspaceId ? { workspaceId: spec.workspaceId } : {}),
+  });
+  const getPage = (fromISO: string, toISO: string, cursor?: string) =>
+    client.getExtensiveCalls({
+      filter: filter(fromISO, toISO),
+      contentSelector,
+      ...(cursor ? { cursor } : {}),
+    }) as Promise<ExtensiveCallsPage>;
+  const iso = (ms: number) => new Date(ms).toISOString();
+
+  const fromMs = Date.parse(spec.fromDateTime);
+  const toMs = Date.parse(spec.toDateTime);
+
+  // Probe the full range (also page 1): its raw count tells us whether the range
+  // fits the budget or needs newest-first windowing.
+  let probe: ExtensiveCallsPage;
+  try {
+    probe = await client.getExtensiveCalls({
+      filter: filter(spec.fromDateTime, spec.toDateTime),
+      contentSelector,
+    }) as ExtensiveCallsPage;
+  } catch (err) {
+    if (isNoCallsFound(err)) return { pages: [], pagesScanned: 0, truncated: false, totalRecords: 0 };
+    throw err;
+  }
+  const total = probe.records?.totalRecords;
+  const firstCursor = probe.records?.cursor;
+
+  // Single page, or the whole range fits the budget → keep paginating FORWARD
+  // from the probe page (we can read it all, so newest-first windowing is moot).
+  // Reuses the probe as page 1 — no wasted re-fetch.
+  if (!firstCursor || (total != null && total <= spec.maxPages * PAGE_SIZE)) {
+    const pages: ExtensiveCallsPage[] = [probe];
+    let cursor = firstCursor;
+    let pagesScanned = 1;
+    while (cursor && pagesScanned < spec.maxPages) {
+      const page = await getPage(spec.fromDateTime, spec.toDateTime, cursor);
+      pages.push(page);
+      pagesScanned++;
+      cursor = page.records?.cursor;
+    }
+    return { pages, pagesScanned, truncated: Boolean(cursor), totalRecords: total, scannedFrom: spec.fromDateTime };
+  }
+
+  // Busy range: walk windows from the newest end backward. A window is only safe
+  // to read ascending if its FULL count fits the per-window cap — otherwise the
+  // ascending fetch returns the window's oldest calls and drops its newest. So we
+  // size each window by measured density, then shrink it (toward the newest edge)
+  // until its count fits, guaranteeing the window's most recent calls are read.
+  const rangeDays = Math.max(1, (toMs - fromMs) / DAY_MS);
+  const density = Math.max(1, (total ?? spec.maxPages * PAGE_SIZE) / rangeDays);
+  const windowMs = Math.max(DAY_MS, Math.floor(WINDOW_TARGET_CALLS / density) * DAY_MS);
+  const perWindowCap = Math.ceil(WINDOW_TARGET_CALLS / PAGE_SIZE) + 3;
+
+  const pages: ExtensiveCallsPage[] = [];
+  let pagesScanned = 0;
+  let budget = spec.maxPages;
+  let windowEnd = toMs;
+  let truncated = false;
+
+  while (budget > 0 && windowEnd > fromMs) {
+    const cap = Math.min(budget, perWindowCap);
+    const capCalls = cap * PAGE_SIZE;
+    let windowStart = Math.max(fromMs, windowEnd - windowMs);
+
+    // Probe + shrink: the first page carries the window's totalRecords. Halve the
+    // window toward windowEnd until it fits the cap (or bottoms out at one day).
+    let first: ExtensiveCallsPage | undefined;
+    for (let guard = 0; guard < 24; guard++) {
+      try {
+        first = await getPage(iso(windowStart), iso(windowEnd));
+      } catch (err) {
+        if (isNoCallsFound(err)) { first = undefined; break; } // empty window
+        throw err;
+      }
+      const wc = first.records?.totalRecords ?? 0;
+      if (wc <= capCalls || windowEnd - windowStart <= DAY_MS) break;
+      windowStart = windowEnd - Math.floor((windowEnd - windowStart) / 2);
+    }
+    if (!first) { windowEnd = windowStart; continue; }
+
+    // Read the (now-fitting) window forward from its first page.
+    pages.push(first);
+    let cursor = first.records?.cursor;
+    let used = 1;
+    while (cursor && used < cap) {
+      const page = await getPage(iso(windowStart), iso(windowEnd), cursor);
+      pages.push(page);
+      used++;
+      cursor = page.records?.cursor;
+    }
+    pagesScanned += used;
+    budget -= used;
+    if (cursor) { truncated = true; break; } // window still didn't fully fit — older calls unread
+    windowEnd = windowStart;
+  }
+  if (windowEnd > fromMs) truncated = true;
+
+  // Honest recency floor: the earliest call we actually collected.
+  let scannedFrom: string | undefined;
+  for (const page of pages)
+    for (const call of page.calls ?? []) {
+      const s = call.metaData?.started;
+      if (s && (!scannedFrom || s < scannedFrom)) scannedFrom = s;
+    }
+
+  return { pages, pagesScanned, truncated, totalRecords: total, scannedFrom };
+}
+
 async function scanCalls(client: GongClient, spec: ScanSpec): Promise<Omit<FindCallsResult, "participantResolution">> {
   const contentSelector: Record<string, unknown> = {
     // Explicit even though the policy clients force it for restricted users:
@@ -294,29 +438,7 @@ async function scanCalls(client: GongClient, spec: ScanSpec): Promise<Omit<FindC
     ...(spec.withCrmContext ? { context: "Extended" } : {}),
   };
 
-  let scan;
-  try {
-    scan = await scanPages<ExtensiveCallsPage>(
-      (cursor) => client.getExtensiveCalls({
-        filter: {
-          fromDateTime: spec.fromDateTime,
-          toDateTime: spec.toDateTime,
-          ...(spec.workspaceId ? { workspaceId: spec.workspaceId } : {}),
-        },
-        contentSelector,
-        ...(cursor ? { cursor } : {}),
-      }) as Promise<ExtensiveCallsPage>,
-      spec.maxPages,
-    );
-  } catch (err) {
-    if (isNoCallsFound(err)) {
-      return {
-        calls: [],
-        coverage: { scannedCalls: 0, matchedCalls: 0, pagesScanned: 0, truncated: false, totalCallsInRange: 0 },
-      };
-    }
-    throw err;
-  }
+  const scan = await scanRecentFirst(client, contentSelector, spec);
 
   const titleQuery = spec.titleContains?.trim().toLowerCase();
   const seen = new Set<string>();
@@ -352,6 +474,17 @@ async function scanCalls(client: GongClient, spec: ScanSpec): Promise<Omit<FindC
   matches.sort((a, b) => (b.started ?? "").localeCompare(a.started ?? ""));
   const capped = matches.slice(0, DISPLAY_CAP);
 
+  const policyNote = scan.pages.find((p) => p.note)?.note;
+  const truncationNote = scan.truncated
+    ? `Coverage is recency-bounded: scanned the most recent calls back to ${scan.scannedFrom?.slice(0, 10) ?? "the range start"}` +
+      `${scan.totalRecords != null ? ` of ${scan.totalRecords} in range` : ""}. ` +
+      `Calls older than that were NOT examined — narrow the date range (or raise maxPages) to reach them.`
+    : undefined;
+  const capNote = matches.length > DISPLAY_CAP
+    ? `Showing ${DISPLAY_CAP} of ${matches.length} matches — narrow the date range or refine the filters.`
+    : undefined;
+  const note = [truncationNote, capNote].filter(Boolean).join(" ");
+
   return {
     calls: capped,
     coverage: {
@@ -360,11 +493,10 @@ async function scanCalls(client: GongClient, spec: ScanSpec): Promise<Omit<FindC
       pagesScanned: scan.pagesScanned,
       truncated: scan.truncated,
       totalCallsInRange: scan.totalRecords,
+      ...(scan.scannedFrom ? { scannedFrom: scan.scannedFrom } : {}),
     },
-    ...(scan.pages[0]?.note ? { policyNote: scan.pages[0].note } : {}),
-    ...(matches.length > DISPLAY_CAP
-      ? { note: `Showing ${DISPLAY_CAP} of ${matches.length} matches — narrow the date range or refine the filters.` }
-      : {}),
+    ...(policyNote ? { policyNote } : {}),
+    ...(note ? { note } : {}),
   };
 }
 
