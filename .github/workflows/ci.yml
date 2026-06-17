@@ -20,17 +20,46 @@ jobs:
       - run: npm run build
       - run: npm test
 
+  # Conventional-commit driven release: bumps package.json (the version whoami
+  # reports), updates CHANGELOG.md, tags, and cuts a GitHub release. The bump is
+  # committed back to main with [skip ci] so it doesn't re-trigger this workflow;
+  # deploy then ships that commit, so whoami's version matches the release.
+  release:
+    name: Release
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Semantic release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx semantic-release
+
   deploy:
     name: Deploy to Render
-    needs: test
+    needs: release
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - name: Trigger Render deploy hook
+        env:
+          DEPLOY_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
         run: |
-          if [ -z "${{ secrets.RENDER_DEPLOY_HOOK_URL }}" ]; then
-            echo "RENDER_DEPLOY_HOOK_URL secret is not set — skipping deploy." >&2
-            exit 1
+          if [ -z "$DEPLOY_HOOK" ]; then
+            echo "::warning::RENDER_DEPLOY_HOOK_URL secret not set — skipping deploy."
+            exit 0
           fi
-          curl -fsS "${{ secrets.RENDER_DEPLOY_HOOK_URL }}" > /dev/null
+          curl -fsS -X POST "$DEPLOY_HOOK" > /dev/null
           echo "Render deploy triggered."
