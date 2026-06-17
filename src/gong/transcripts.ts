@@ -13,11 +13,11 @@
  * getCallTranscripts and getExtensiveCalls are both policy/scope overrides, so
  * access control applies by construction. Transcripts are fetched FIRST so a
  * restricted client's deny fails closed before any parties fetch — do not
- * reorder. For a restricted user that gate already fetches parties once, so this
- * module's parties fetch is a second one on that path; the common unrestricted
- * path (incl. the org-credential gateway) fetches parties exactly once. The
- * tool is low-frequency and bounded at 100 callIds, so the extra POST is not
- * worth optimizing away (it would couple this module to policy internals).
+ * reorder. The transcript gate always runs a visibility + owner-only private-call
+ * check (one parties fetch) so a private call's transcript can't leak, making this
+ * module's roster fetch a second parties fetch on every policy path. The tool is
+ * low-frequency and bounded at 100 callIds, so the extra POST is not worth
+ * optimizing away (it would couple this module to policy internals).
  */
 import type { GongClient } from "./client.js";
 import { isNoCallsFound, type ExtensiveParty } from "./discovery.js";

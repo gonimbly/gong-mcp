@@ -36,8 +36,15 @@ interface ExtensiveParty {
 }
 
 interface ExtensiveCall {
-  metaData?: { id?: string; workspaceId?: string };
+  metaData?: { id?: string; workspaceId?: string; isPrivate?: boolean; primaryUserId?: string | number };
   parties?: ExtensiveParty[];
+}
+
+/** Basic /v2/calls record — isPrivate/primaryUserId ride at the top level here. */
+interface BasicCall {
+  id?: string;
+  isPrivate?: boolean;
+  primaryUserId?: string | number;
 }
 
 interface ExtensiveCallsResponse {
@@ -101,7 +108,22 @@ export class PolicyGongClient extends GongClient {
 
   // ── Calls: visibility-filtered by the policy's visible-user set ────────────
 
+  /**
+   * Private calls are OWNER-ONLY. A call marked private in Gong is visible solely to
+   * its owner (primaryUserId) — never through reporting-tree visibility, all-access,
+   * the privateCalls capability, or another participant. The org API key returns
+   * private calls regardless, so we re-impose this on every read path. `isPrivate`
+   * and `primaryUserId` are present on both the extensive (metaData) and basic shapes.
+   */
+  private isHiddenPrivate(isPrivate: unknown, primaryUserId: unknown): boolean {
+    return isPrivate === true && String(primaryUserId ?? "") !== this.identity.userId;
+  }
+
   private isVisibleCall(call: ExtensiveCall): boolean {
+    // Owner-only short-circuit: a private call bypasses all reporting-tree logic.
+    if (call.metaData?.isPrivate === true) {
+      return !this.isHiddenPrivate(true, call.metaData.primaryUserId);
+    }
     const access = this.access("calls", call.metaData?.workspaceId);
     const visible = access.visibleUserIds;
     if (visible === null) return true;
@@ -138,7 +160,12 @@ export class PolicyGongClient extends GongClient {
   }
 
   override async listCalls(params?: { cursor?: string; fromDateTime?: string; toDateTime?: string; workspaceId?: string }) {
-    if (this.callsUnrestricted(params?.workspaceId)) return super.listCalls(params);
+    if (this.callsUnrestricted(params?.workspaceId)) {
+      // Unrestricted callers still must not see others' private calls (owner-only).
+      const data = await super.listCalls(params) as { calls?: BasicCall[] };
+      const calls = (data.calls ?? []).filter((c) => !this.isHiddenPrivate(c.isPrivate, c.primaryUserId));
+      return calls.length === (data.calls?.length ?? 0) ? data : { ...data, calls };
+    }
     const range = this.defaultRange(params?.fromDateTime, params?.toDateTime);
     const data = await super.getExtensiveCalls({
       filter: { ...range, ...(params?.workspaceId ? { workspaceId: params.workspaceId } : {}) },
@@ -153,10 +180,11 @@ export class PolicyGongClient extends GongClient {
   }
 
   override async getCall(callId: string) {
-    if (this.callsUnrestricted()) return super.getCall(callId);
+    // No unrestricted shortcut: visibleCallIds → isVisibleCall enforces both the
+    // visible-set (true for all-access) and the owner-only private-call rule.
     const allowed = await this.visibleCallIds([callId]);
     if (!allowed.has(String(callId))) {
-      this.deny(`call ${callId}`, "The call is outside your profile's visibility.");
+      this.deny(`call ${callId}`, "The call is outside your profile's visibility or is a private call you don't own.");
     }
     return super.getCall(callId);
   }
@@ -167,7 +195,12 @@ export class PolicyGongClient extends GongClient {
     cursor?: string;
   }) {
     const workspaceId = body.filter?.workspaceId as string | undefined;
-    if (this.callsUnrestricted(workspaceId)) return super.getExtensiveCalls(body);
+    if (this.callsUnrestricted(workspaceId)) {
+      // Unrestricted callers still must not see others' private calls (owner-only).
+      const data = await super.getExtensiveCalls(body) as ExtensiveCallsResponse;
+      const calls = (data.calls ?? []).filter((c) => !this.isHiddenPrivate(c.metaData?.isPrivate, c.metaData?.primaryUserId));
+      return calls.length === (data.calls?.length ?? 0) ? data : { ...data, calls };
+    }
     const contentSelector = {
       ...(body.contentSelector ?? {}),
       exposedFields: {
@@ -184,11 +217,11 @@ export class PolicyGongClient extends GongClient {
   }
 
   override async getCallTranscripts(callIds: string[]) {
-    if (this.callsUnrestricted()) return super.getCallTranscripts(callIds);
+    // No unrestricted shortcut: a private call's transcript is owner-only too.
     const allowed = await this.visibleCallIds(callIds);
     const denied = callIds.filter((id) => !allowed.has(String(id)));
     if (denied.length > 0) {
-      this.deny(`transcripts for call(s) ${denied.join(", ")}`, "They are outside your profile's visibility.");
+      this.deny(`transcripts for call(s) ${denied.join(", ")}`, "They are outside your profile's visibility or are private calls you don't own.");
     }
     return super.getCallTranscripts(callIds);
   }
