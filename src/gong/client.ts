@@ -72,9 +72,11 @@ export class GongClient {
 
   private async request<T>(path: string, options: RequestInit = {}): Promise<T> {
     if (quotaTracker.isOverLimit()) {
+      const { limit } = quotaTracker.getStatus();
       throw new Error(
-        "GONG API daily quota of 50,000 requests has been reached. " +
-        "Quota resets at midnight UTC — please try again tomorrow."
+        `GONG API daily quota of ${limit} requests has been reached. ` +
+        "Quota resets at midnight UTC — please try again tomorrow. " +
+        "If your org has a higher negotiated Gong limit, set GONG_DAILY_QUOTA."
       );
     }
 
