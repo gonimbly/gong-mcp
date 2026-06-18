@@ -1,11 +1,11 @@
 import { randomBytes } from "node:crypto";
 import type { Request, Response } from "express";
 import type { OAuthServerProvider, AuthorizationParams } from "@modelcontextprotocol/sdk/server/auth/provider.js";
-import type { OAuthRegisteredClientsStore } from "@modelcontextprotocol/sdk/server/auth/clients.js";
 import type { AuthInfo } from "@modelcontextprotocol/sdk/server/auth/types.js";
 import type { OAuthClientInformationFull, OAuthTokens, OAuthTokenRevocationRequest } from "@modelcontextprotocol/sdk/shared/auth.js";
 import { InvalidGrantError, InvalidTokenError } from "@modelcontextprotocol/sdk/server/auth/errors.js";
 import { signJwt, verifyJwt } from "./jwt.js";
+import { PersistentClientsStore, resolveClientStorePath } from "./clientStore.js";
 
 const GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
@@ -88,25 +88,17 @@ interface IssuedCode {
   expiresAt: number;
 }
 
-class InMemoryClientsStore implements OAuthRegisteredClientsStore {
-  private clients = new Map<string, OAuthClientInformationFull>();
-
-  getClient(clientId: string) {
-    return this.clients.get(clientId);
-  }
-
-  registerClient(client: OAuthClientInformationFull) {
-    this.clients.set(client.client_id, client);
-    return client;
-  }
-}
-
 export class GoogleOAuthProvider implements OAuthServerProvider {
-  readonly clientsStore = new InMemoryClientsStore();
+  readonly clientsStore: PersistentClientsStore;
   private pendingAuth = new Map<string, PendingAuth>();
   private issuedCodes = new Map<string, IssuedCode>();
 
-  constructor(private readonly config: GatewayConfig) {}
+  constructor(private readonly config: GatewayConfig) {
+    // Persist Dynamic Client Registrations so silent token refresh survives a
+    // restart — otherwise the SDK rejects the refresh with invalid_client and the
+    // user must manually reconnect.
+    this.clientsStore = new PersistentClientsStore(resolveClientStorePath());
+  }
 
   private googleRedirectUri(): string {
     return `${this.config.baseUrl}/auth/google/callback`;
