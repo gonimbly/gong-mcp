@@ -97,11 +97,22 @@ and the `GONG_ADMIN_EMAILS` break-glass keeps admin access in every mode.
 ## CI/CD
 
 `.github/workflows/ci.yml` runs build + the unit-test suite on every pull request.
-On push to `main`, after tests pass, it triggers a Render deploy via the service's
-deploy hook (`RENDER_DEPLOY_HOOK_URL` repo secret). Render's native auto-deploy is
-disabled (`autoDeploy: false` in `render.yaml`) so untested code never ships.
+On push to `main`, after tests pass, semantic-release cuts a release, then the
+workflow triggers a Render deploy via the service's deploy hook
+(`RENDER_DEPLOY_HOOK_URL` repo secret). Render's native auto-deploy is disabled
+(`autoDeploy: false` in `render.yaml`) so untested code never ships.
 
-Pipeline: `PR → CI (build + 50 tests) → merge to main → CI → Render deploy hook → live`
+When a release is published the release job also posts its notes to the Slack
+alerts channel (`ALERT_SLACK_WEBHOOK_URL` repo **Actions secret** — the same
+incoming-webhook URL the runtime alerts use; add it under Settings → Secrets and
+variables → Actions). semantic-release runs with the default `GITHUB_TOKEN`, so a
+separate workflow keyed on the GitHub `release` event would never fire — the post
+happens inside the release job. Notes are converted from Markdown to Slack mrkdwn
+by `scripts/md-to-mrkdwn.ts`. If the secret is unset the step logs a warning and
+skips. (Releases that aren't published — pushes with no `feat`/`fix` commits —
+post nothing.)
+
+Pipeline: `PR → CI (build + tests) → merge to main → CI → semantic-release → Slack notes + Render deploy hook → live`
 
 ## Deploy on Render (one-time setup)
 
