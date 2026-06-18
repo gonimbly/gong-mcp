@@ -48,7 +48,7 @@ OAuth tokens are stored in `~/.gong-mcp/tokens.json` (owner read/write only). Th
 
 ## What's inside
 
-51 tools across 14 modules:
+52 tools across 14 modules:
 
 | Module | What you get |
 |---|---|
