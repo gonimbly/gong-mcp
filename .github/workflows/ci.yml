@@ -43,9 +43,40 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Semantic release
+        id: semrel
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npx semantic-release
+        run: |
+          prev=$(git describe --tags --abbrev=0 2>/dev/null || echo none)
+          npx semantic-release
+          new=$(git describe --tags --abbrev=0 2>/dev/null || echo none)
+          if [ "$new" != "$prev" ] && [ "$new" != none ]; then
+            echo "released=true" >> "$GITHUB_OUTPUT"
+            echo "tag=$new" >> "$GITHUB_OUTPUT"
+          else
+            echo "released=false" >> "$GITHUB_OUTPUT"
+          fi
+      # Post the new release's notes to the same Slack channel the runtime alerts
+      # use. semantic-release runs with GITHUB_TOKEN, so a separate workflow keyed
+      # on the `release` event would NOT fire (GitHub blocks GITHUB_TOKEN-created
+      # events from triggering workflows) — hence we post here, in the same job.
+      - name: Post release notes to Slack
+        if: steps.semrel.outputs.released == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SLACK_WEBHOOK: ${{ secrets.ALERT_SLACK_WEBHOOK_URL }}
+        run: |
+          if [ -z "$SLACK_WEBHOOK" ]; then
+            echo "::warning::ALERT_SLACK_WEBHOOK_URL secret not set — skipping Slack release note."
+            exit 0
+          fi
+          tag="${{ steps.semrel.outputs.tag }}"
+          url=$(gh release view "$tag" --json url --jq .url)
+          notes=$(gh release view "$tag" --json body --jq .body | npx tsx scripts/md-to-mrkdwn.ts)
+          payload=$(jq -n --arg t "$tag" --arg u "$url" --arg n "$notes" \
+            '{text: (":rocket: *gong-mcp " + $t + " released*  " + $u + "\n\n" + $n)}')
+          curl -fsS -X POST -H 'Content-Type: application/json' -d "$payload" "$SLACK_WEBHOOK" >/dev/null
+          echo "Posted $tag release notes to Slack."
 
   deploy:
     name: Deploy to Render
