@@ -144,6 +144,7 @@ This is the server-side credential; it is never shared with users.
 | `GONG_ALLOWED_DOMAIN` | Defaults to `gonimbly.com` |
 | `GONG_ACCESS_KEY` / `GONG_ACCESS_KEY_SECRET` | From step 2 |
 | `GONG_BASE_URL` | Your org's API endpoint as shown in Gong → Settings → API (e.g. `https://us-32447.api.gong.io`) — access keys are rejected on the generic `api.gong.io` |
+| `GONG_DAILY_QUOTA` | Optional — your org's negotiated daily Gong API request limit. Defaults to Gong's documented **10,000/day** (the cap is not discoverable via the API). The tracker hard-stops at this number and always raises the first Slack alert by the 10,000 mark, even if you set it higher |
 
 ### Local development
 

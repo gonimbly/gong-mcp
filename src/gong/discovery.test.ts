@@ -24,15 +24,22 @@ const USERS = [
 
 const ACME_CONTEXT = [{
   system: "Salesforce",
-  objects: [{
-    objectType: "Account",
-    objectId: "001X",
-    fields: [
-      { name: "Name", value: "Acme Corp" },
-      { name: "Website", value: "https://acme.com" },
-      { name: "Domain__c", value: "acme.com" },
-    ],
-  }],
+  objects: [
+    {
+      objectType: "Account",
+      objectId: "001X",
+      fields: [
+        { name: "Name", value: "Acme Corp" },
+        { name: "Website", value: "https://acme.com" },
+        { name: "Domain__c", value: "acme.com" },
+      ],
+    },
+    {
+      objectType: "Opportunity",
+      objectId: "006Y",
+      fields: [{ name: "Name", value: "Acme - New Business" }],
+    },
+  ],
 }];
 
 const CALL_CONTENT = {
@@ -292,6 +299,23 @@ describe("findCalls account matching", () => {
   });
 });
 
+describe("findCalls CRM references", () => {
+  test("surfaces Salesforce Account and Opportunity objectIds, not just the name", async () => {
+    const result = await findCalls(client, { account: "Acme Corp" });
+    const call = result.calls.find((c) => c.id === "c-1")!;
+    assert.equal(call.account, "Acme Corp", "display name still present");
+    assert.deepEqual(call.crmRefs, [
+      { system: "Salesforce", objectType: "Account", objectId: "001X", name: "Acme Corp" },
+      { system: "Salesforce", objectType: "Opportunity", objectId: "006Y", name: "Acme - New Business" },
+    ]);
+  });
+
+  test("omits crmRefs when no CRM context was fetched (participant search)", async () => {
+    const result = await findCalls(client, { participant: "nikki" });
+    assert.equal(result.calls[0].crmRefs, undefined);
+  });
+});
+
 describe("findCalls pagination and coverage", () => {
   test("follows cursors across all pages by default", async () => {
     await findCalls(client, { participant: "nikki" });
@@ -363,6 +387,14 @@ describe("summarizeCall", () => {
     const body = extensiveRequests()[0].body;
     assert.deepEqual(body.filter, { callIds: ["c-1"] });
     assert.equal(body.contentSelector.exposedFields.content.brief, true);
+  });
+
+  test("includes CRM object references with their Salesforce IDs", async () => {
+    const digest = await summarizeCall(client, "c-1");
+    assert.deepEqual(digest.crmRefs, [
+      { system: "Salesforce", objectType: "Account", objectId: "001X", name: "Acme Corp" },
+      { system: "Salesforce", objectType: "Opportunity", objectId: "006Y", name: "Acme - New Business" },
+    ]);
   });
 
   test("a call hidden by policy reads as not-found, same as a missing call", async () => {

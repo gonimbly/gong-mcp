@@ -1,6 +1,7 @@
 import { describe, test, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { GongClient } from "./client.js";
+import { quotaTracker } from "./quota.js";
 
 // Use org credential path to bypass local OAuth keychain
 process.env.GONG_ACCESS_KEY = "test-key";
@@ -180,5 +181,28 @@ describe("GongClient — consecutive error spike", () => {
     await new Promise((r) => setTimeout(r, 0));
     const consecutiveAlerts = alerts.filter((a) => a.includes("consecutive")).length;
     assert.equal(consecutiveAlerts, 1, "fresh spike should trigger a new alert");
+  });
+});
+
+describe("GongClient — daily quota gate", () => {
+  test("over-limit request reports the live limit, not a hard-coded number", async () => {
+    const q = quotaTracker as any;
+    const savedCount = q.count;
+    const savedDate = q.date;
+    try {
+      process.env.GONG_DAILY_QUOTA = "12345";
+      q.date = new Date().toISOString().slice(0, 10);
+      q.count = 12_345; // at the configured limit
+      const client = new GongClient("https://api.gong.test");
+      await assert.rejects(
+        () => client.listWorkspaces(),
+        (err: Error) =>
+          err.message.includes("12345") && !err.message.includes("50,000")
+      );
+    } finally {
+      q.count = savedCount;
+      q.date = savedDate;
+      delete process.env.GONG_DAILY_QUOTA;
+    }
   });
 });
