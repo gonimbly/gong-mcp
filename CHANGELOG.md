@@ -1,3 +1,10 @@
+## [1.0.1](https://github.com/gonimbly/gong-mcp/compare/v1.0.0...v1.0.1) (2026-06-18)
+
+
+### Bug Fixes
+
+* **gateway:** persist OAuth client registrations so connectors survive restarts ([#19](https://github.com/gonimbly/gong-mcp/issues/19)) ([f0dd43d](https://github.com/gonimbly/gong-mcp/commit/f0dd43dd20aba55159a804d5e2d4dd93772d2463))
+
 # 1.0.0 (2026-06-17)
 
 
