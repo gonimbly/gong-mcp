@@ -130,6 +130,14 @@ The repo contains `render.yaml` — create a new Blueprint service from the repo
 4. Trigger the first deploy manually (Render dashboard → Manual Deploy) or push to
    `main`. Watch the logs for `Gong credential check: OK`.
 
+The blueprint declares a small **persistent disk** (`/var/data`, 1 GB) that stores OAuth
+client registrations so Dynamic Client Registration survives restarts — without it, every
+restart rejects Claude's silent token refresh with `invalid_client` and forces users to
+reconnect. A Render disk attaches to a single instance and makes deploys "recreate" (a few
+seconds of downtime as the disk re-attaches) rather than zero-downtime; keep the instance
+count at 1. (The deploy that first introduces the disk starts it empty, so existing
+connectors re-register once more, then stay stable.)
+
 ### 1. Create a Google OAuth client
 
 Google Cloud Console → APIs & Services → Credentials → Create OAuth client ID:
@@ -149,6 +157,7 @@ This is the server-side credential; it is never shared with users.
 | `BASE_URL` | Public URL of the service, no trailing slash |
 | `GOOGLE_OAUTH_CLIENT_ID` / `GOOGLE_OAUTH_CLIENT_SECRET` | From step 1 |
 | `SESSION_SIGNING_KEY` | Long random string (Render generates it via the blueprint) |
+| `GONG_CLIENT_STORE_PATH` | Where OAuth client registrations are persisted. Set to `/var/data/clients.json` in `render.yaml` (on the persistent disk) so Dynamic Client Registration survives restarts; defaults to the OS temp dir locally |
 | `GONG_ALLOWED_EMAILS` | Optional — unset means any verified `GONG_ALLOWED_DOMAIN` account can sign in (as a member). Set a comma-separated list to restrict sign-in, e.g. during a pilot |
 | `GONG_ADMIN_EMAILS` | Comma-separated admins with org-wide access; everyone else is a member (break-glass override in `profiles` mode) |
 | `GONG_POLICY_MODE` | Optional — `profiles` (default), `binary` (rollback), or `shadow` (diagnostic); see "Access model" above |
@@ -189,8 +198,12 @@ in the browser on first use.
   Gong's native permission profiles. In the default `profiles` mode this applies
   only when a user's profile cannot be resolved (fail-closed `[policy] DEGRADED`
   sessions).
-- **In-memory sessions and client registrations** — a deploy or restart requires
-  clients to re-authenticate (Claude handles this automatically).
+- **In-memory sessions** — a deploy or restart drops live MCP sessions, but Claude
+  transparently re-initializes a new session from its existing bearer token, so this is
+  invisible to users. Client **registrations**, by contrast, are persisted to the
+  Render disk at `GONG_CLIENT_STORE_PATH` (default `/var/data/clients.json`): losing
+  them would reject Claude's silent token refresh with `invalid_client` and force a
+  manual reconnect, so they must survive restarts.
 - **Stateless JWTs** — access revocation (removing someone from the allowlist, or a
   user leaving the Google domain) takes effect at next token refresh (max 8 h). For
   immediate revocation of everyone's sessions, rotate `SESSION_SIGNING_KEY`.

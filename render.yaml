@@ -10,6 +10,14 @@ services:
     buildCommand: npm ci && npm run build
     startCommand: npm run start:http
     healthCheckPath: /healthz
+    # Persistent disk for OAuth Dynamic Client Registration state. Without it, client
+    # registrations live only in memory and are wiped on every restart — which breaks
+    # Claude's silent token refresh and forces users to manually reconnect (~daily).
+    # A Render disk attaches to a single instance, so keep this service at one instance.
+    disk:
+      name: gong-mcp-data
+      mountPath: /var/data
+      sizeGB: 1
     envVars:
       - key: BASE_URL            # public URL of this service, e.g. https://gong-mcp-gateway.onrender.com
         sync: false
@@ -19,6 +27,8 @@ services:
         sync: false
       - key: SESSION_SIGNING_KEY
         generateValue: true
+      - key: GONG_CLIENT_STORE_PATH   # OAuth client registrations persist here, on the disk above
+        value: /var/data/clients.json
       # GONG_ALLOWED_EMAILS is optional — when unset, any verified account on
       # GONG_ALLOWED_DOMAIN can sign in (member access). Set it only to restrict
       # sign-in to specific people, e.g. during a pilot.
