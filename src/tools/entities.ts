@@ -18,7 +18,7 @@ export function registerEntityTools(server: McpServer, client: GongClient) {
     ].join(" "),
     {
       workspaceId: z.string().optional().describe("Gong workspace ID (auto-resolved when the org has exactly one)"),
-      crmAccountId: z.string().describe("CRM account ID (e.g. Salesforce Account ID — find it on a call via gong_find_calls account context or gong_call_summary)"),
+      crmAccountId: z.string().describe("CRM account ID (e.g. Salesforce Account ID — find it in the `crmRefs` Account objectId returned by gong_find_calls or gong_call_summary)"),
       timePeriod,
       question: z.string().describe('Natural-language question, e.g. "What are the main objections raised by the prospect?"'),
     },
@@ -42,7 +42,7 @@ export function registerEntityTools(server: McpServer, client: GongClient) {
     ].join(" "),
     {
       workspaceId: z.string().optional().describe("Gong workspace ID (auto-resolved when the org has exactly one)"),
-      crmDealId: z.string().describe("CRM deal/opportunity ID (e.g. Salesforce Opportunity ID)"),
+      crmDealId: z.string().describe("CRM deal/opportunity ID (e.g. Salesforce Opportunity ID — find it in the `crmRefs` Opportunity objectId returned by gong_call_summary or gong_find_calls)"),
       timePeriod,
       question: z.string().describe('Natural-language question, e.g. "What are the main blockers preventing this deal from closing?"'),
     },

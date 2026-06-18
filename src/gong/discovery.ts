@@ -176,6 +176,38 @@ function accountNames(call: ExtensiveCallRecord): string[] {
   return names;
 }
 
+/** A CRM object linked to the call (Salesforce Account/Opportunity, etc.). */
+export interface CrmRef {
+  system?: string;
+  objectType?: string;
+  objectId: string;
+  name?: string;
+}
+
+/**
+ * CRM object references attached to the call via contentSelector.context — the
+ * Salesforce objectId the Gong UI links to. We parse this for account matching
+ * but otherwise drop it; surfacing it lets callers deep-link the exact record and
+ * is the anchor any CRM write-back needs. Only objects carrying an objectId are
+ * returned (covers Account, Opportunity, and any other linked CRM object).
+ */
+function crmRefs(call: ExtensiveCallRecord): CrmRef[] {
+  const refs: CrmRef[] = [];
+  for (const ctx of call.context ?? []) {
+    for (const obj of ctx.objects ?? []) {
+      if (!obj.objectId) continue;
+      const name = obj.fields?.find((f) => f.name === "Name" && typeof f.value === "string")?.value;
+      refs.push({
+        ...(ctx.system ? { system: ctx.system } : {}),
+        ...(obj.objectType ? { objectType: obj.objectType } : {}),
+        objectId: obj.objectId,
+        ...(typeof name === "string" ? { name } : {}),
+      });
+    }
+  }
+  return refs;
+}
+
 // ── Compact output ────────────────────────────────────────────────────────────
 
 export interface CompactParticipant {
@@ -195,6 +227,7 @@ export interface CompactCall {
   workspaceId?: string;
   primaryUserId?: string;
   account?: string;
+  crmRefs?: CrmRef[];
   participants: CompactParticipant[];
   matchedOn: string[];
 }
@@ -237,6 +270,7 @@ function compactParty(p: ExtensiveParty): CompactParticipant {
 function toCompactCall(call: ExtensiveCallRecord, matchedOn: string[]): CompactCall {
   const meta = call.metaData ?? {};
   const account = accountNames(call)[0];
+  const refs = crmRefs(call);
   return {
     id: String(meta.id),
     url: meta.url,
@@ -247,6 +281,7 @@ function toCompactCall(call: ExtensiveCallRecord, matchedOn: string[]): CompactC
     workspaceId: meta.workspaceId != null ? String(meta.workspaceId) : undefined,
     primaryUserId: meta.primaryUserId != null ? String(meta.primaryUserId) : undefined,
     ...(account ? { account } : {}),
+    ...(refs.length ? { crmRefs: refs } : {}),
     participants: (call.parties ?? []).map(compactParty),
     matchedOn,
   };
@@ -599,6 +634,7 @@ export interface CallDigest {
   language?: string;
   workspaceId?: string;
   account?: string;
+  crmRefs?: CrmRef[];
   participants: Array<CompactParticipant & { title?: string }>;
   outcome?: string;
   brief?: string;
@@ -665,6 +701,7 @@ export async function summarizeCall(client: GongClient, callId: string): Promise
     .filter((t) => (t.count ?? 0) > 0)
     .map((t) => ({ name: t.name, count: t.count }));
   const account = accountNames(call)[0];
+  const refs = crmRefs(call);
 
   return {
     id: String(meta.id ?? callId),
@@ -678,6 +715,7 @@ export async function summarizeCall(client: GongClient, callId: string): Promise
     language: meta.language,
     workspaceId: meta.workspaceId != null ? String(meta.workspaceId) : undefined,
     ...(account ? { account } : {}),
+    ...(refs.length ? { crmRefs: refs } : {}),
     participants: (call.parties ?? []).map((p) => ({ ...compactParty(p), title: p.title })),
     outcome: toText(content.callOutcome),
     brief: content.brief || undefined,

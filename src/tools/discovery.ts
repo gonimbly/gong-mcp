@@ -20,7 +20,9 @@ export function registerDiscoveryTools(server: McpServer, client: GongClient, id
       "the question is FINDING a person's or a client's calls — it scans multiple pages server-side, matches " +
       "participants by Gong user, email, or display name (external attendees included), matches accounts via " +
       "CRM context, call titles, and external email domains, and returns compact results with a coverage " +
-      "report (scanned/matched/truncated). For full enriched content of already-known calls, follow up with " +
+      "report (scanned/matched/truncated). When an account query attaches CRM context, each call carries " +
+      "`crmRefs` — the linked CRM object IDs (e.g. Salesforce Account and Opportunity), ready to pass to " +
+      "gong_ask_account/gong_ask_deal. For full enriched content of already-known calls, follow up with " +
       "gong_call_summary or gong_get_extensive_calls.",
     {
       participant: z.string().optional().describe(
@@ -103,8 +105,9 @@ export function registerDiscoveryTools(server: McpServer, client: GongClient, id
   server.tool(
     "gong_call_summary",
     "Compact one-call digest: outcome, brief, key points, next steps, topics, trackers, participants, CRM " +
-      "account — WITHOUT the transcript. Use this instead of gong_get_transcripts or gong_get_extensive_calls " +
-      "to answer 'what was this call about'; fetch the transcript only when exact quotes are needed.",
+      "account plus `crmRefs` (linked Salesforce Account/Opportunity IDs) — WITHOUT the transcript. Use this " +
+      "instead of gong_get_transcripts or gong_get_extensive_calls to answer 'what was this call about'; fetch " +
+      "the transcript only when exact quotes are needed.",
     {
       callId: z.string().describe("The Gong call ID"),
     },
