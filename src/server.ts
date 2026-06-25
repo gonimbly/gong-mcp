@@ -25,6 +25,7 @@ import { registerDiscoveryTools } from "./tools/discovery.js";
 import { registerUserTools } from "./tools/users.js";
 import { registerStatsTools } from "./tools/stats.js";
 import { registerEntityTools } from "./tools/entities.js";
+import { registerEntityContextTools } from "./tools/entityContext.js";
 import { registerSettingsTools } from "./tools/settings.js";
 import { registerLibraryTools } from "./tools/library.js";
 import { registerCrmTools } from "./tools/crm.js";
@@ -120,6 +121,7 @@ function buildServer(identity: GongIdentity, client: GongClient, accessSummary: 
   registerUserTools(server, client);
   registerStatsTools(server, client);
   registerEntityTools(server, client);
+  registerEntityContextTools(server, client);
   registerSettingsTools(server, client, identity);
   registerLibraryTools(server, client);
   registerCrmTools(server, client);

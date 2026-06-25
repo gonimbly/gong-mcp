@@ -320,6 +320,10 @@ interface ScanSpec {
   participant?: ParticipantSpec;
   account?: string;
   titleContains?: string;
+  /** Match calls whose CRM context links the given Salesforce objectId (Account
+   * or Opportunity). Requires withCrmContext — unlike `account` (name/domain
+   * fuzzy match) this is an exact CRM-id link, used by gong_entity_context. */
+  crmObjectId?: string;
   fromDateTime: string;
   toDateTime: string;
   workspaceId?: string;
@@ -502,6 +506,10 @@ async function scanCalls(client: GongClient, spec: ScanSpec): Promise<Omit<FindC
         if (!call.metaData?.title?.toLowerCase().includes(titleQuery)) continue;
         matchedOn.push("title");
       }
+      if (spec.crmObjectId) {
+        if (!crmRefs(call).some((r) => r.objectId === spec.crmObjectId)) continue;
+        matchedOn.push(`crmObjectId:${spec.crmObjectId}`);
+      }
       matches.push(toCompactCall(call, matchedOn));
     }
   }
@@ -620,6 +628,46 @@ export async function findMyCalls(
   });
 }
 
+/**
+ * Find calls in a date range linked to a specific Salesforce CRM objectId — an
+ * Account or Opportunity id, as carried in each call's `crmRefs`. This is the
+ * exact-id counterpart to findCalls({ account }) (which matches by name/domain),
+ * and the call-linkage path behind gong_entity_context for ACCOUNT/DEAL entities.
+ */
+export async function findCallsByCrmObject(
+  client: GongClient,
+  opts: { crmObjectId: string } & Pick<FindCallsOptions, "fromDateTime" | "toDateTime" | "workspaceId" | "maxPages">,
+): Promise<FindCallsResult> {
+  return scanCalls(client, {
+    crmObjectId: opts.crmObjectId,
+    ...resolveRange(opts),
+    workspaceId: opts.workspaceId,
+    maxPages: clampMaxPages(opts.maxPages),
+    withCrmContext: true,
+  });
+}
+
+/**
+ * Find calls in a date range that a specific person attended, matched by EXACT
+ * email — not the fuzzy substring findCalls uses for its participant query. This
+ * keeps one contact's context from folding in a different attendee whose address
+ * merely contains the query (e.g. "a@acme.com" must not pull in "xa@acme.com").
+ * Covers external attendees: unlinked party records carry the email but no userId.
+ * Behind gong_entity_context for CONTACT/LEAD entities.
+ */
+export async function findCallsByParticipantEmail(
+  client: GongClient,
+  opts: { email: string } & Pick<FindCallsOptions, "fromDateTime" | "toDateTime" | "workspaceId" | "maxPages">,
+): Promise<FindCallsResult> {
+  return scanCalls(client, {
+    participant: { userIds: new Set(), emailExact: opts.email.trim().toLowerCase() },
+    ...resolveRange(opts),
+    workspaceId: opts.workspaceId,
+    maxPages: clampMaxPages(opts.maxPages),
+    withCrmContext: false,
+  });
+}
+
 // ── Call summary ──────────────────────────────────────────────────────────────
 
 export interface CallDigest {
@@ -659,39 +707,27 @@ const toTextArray = (v: unknown): string[] | undefined => {
   return items.length ? items : undefined;
 };
 
-export async function summarizeCall(client: GongClient, callId: string): Promise<CallDigest> {
-  const notVisible = () =>
-    new Error(`Call ${callId} was not found or is not visible to your Gong permission profile.`);
+/** Content selector that exposes everything a CallDigest surfaces: parties plus
+ * Gong's pre-computed (free) content fields. Shared by summarizeCall and the
+ * batched summarizeCalls so single and bulk digests are always consistent. */
+export const DIGEST_CONTENT_SELECTOR = {
+  context: "Extended",
+  exposedFields: {
+    parties: true,
+    content: {
+      topics: true,
+      trackers: true,
+      brief: true,
+      keyPoints: true,
+      callOutcome: true,
+      nextSteps: true,
+    },
+  },
+} as const;
 
-  let data: ExtensiveCallsPage;
-  try {
-    data = await client.getExtensiveCalls({
-      filter: { callIds: [callId] },
-      contentSelector: {
-        context: "Extended",
-        exposedFields: {
-          parties: true,
-          content: {
-            topics: true,
-            trackers: true,
-            brief: true,
-            keyPoints: true,
-            callOutcome: true,
-            nextSteps: true,
-          },
-        },
-      },
-    }) as ExtensiveCallsPage;
-  } catch (err) {
-    if (isNoCallsFound(err)) throw notVisible();
-    throw err;
-  }
-
-  // Both policy clients silently filter this endpoint, so an empty page means
-  // missing OR hidden — same answer either way.
-  const call = (data.calls ?? [])[0];
-  if (!call) throw notVisible();
-
+/** Build a CallDigest from one /v2/calls/extensive record fetched with
+ * DIGEST_CONTENT_SELECTOR. Pure (no I/O) so it serves both single and batched fetches. */
+export function digestFromExtensive(call: ExtensiveCallRecord): CallDigest {
   const meta = call.metaData ?? {};
   const content = call.content ?? {};
   const topics = (content.topics ?? [])
@@ -704,7 +740,7 @@ export async function summarizeCall(client: GongClient, callId: string): Promise
   const refs = crmRefs(call);
 
   return {
-    id: String(meta.id ?? callId),
+    id: String(meta.id),
     url: meta.url,
     title: meta.title,
     started: meta.started,
@@ -724,4 +760,61 @@ export async function summarizeCall(client: GongClient, callId: string): Promise
     ...(topics.length ? { topics } : {}),
     ...(trackers.length ? { trackers } : {}),
   };
+}
+
+export async function summarizeCall(client: GongClient, callId: string): Promise<CallDigest> {
+  const notVisible = () =>
+    new Error(`Call ${callId} was not found or is not visible to your Gong permission profile.`);
+
+  let data: ExtensiveCallsPage;
+  try {
+    data = await client.getExtensiveCalls({
+      filter: { callIds: [callId] },
+      contentSelector: DIGEST_CONTENT_SELECTOR,
+    }) as ExtensiveCallsPage;
+  } catch (err) {
+    if (isNoCallsFound(err)) throw notVisible();
+    // A malformed/oversized id (non-numeric, or larger than Gong's int64) makes
+    // Gong reject the filter with an opaque 400 "Json parse error". Relabel ONLY
+    // that id-parse signature; any other 400 keeps its diagnostics rather than
+    // being misattributed to a bad id.
+    if (err instanceof GongApiError && err.status === 400 && /json parse|parse error/i.test(err.message)) {
+      throw new Error(`Call ${callId} is not a valid Gong call id (the API could not parse it).`);
+    }
+    throw err;
+  }
+
+  // Both policy clients silently filter this endpoint, so an empty page means
+  // missing OR hidden — same answer either way.
+  const call = (data.calls ?? [])[0];
+  if (!call) throw notVisible();
+  return digestFromExtensive(call);
+}
+
+/** Batched summarizeCall: digests for many call ids in as few /v2/calls/extensive
+ * requests as possible. Follows the response cursor so a callIds set larger than
+ * one API page (100) is never silently truncated. Returns a digest for each call
+ * the session can see — ids that are missing or hidden by policy are simply
+ * absent. Order follows the API response, so callers that want newest-first
+ * should sort on `started`. */
+export async function summarizeCalls(client: GongClient, callIds: string[]): Promise<CallDigest[]> {
+  if (!callIds.length) return [];
+  const digests: CallDigest[] = [];
+  let cursor: string | undefined;
+  do {
+    let data: ExtensiveCallsPage;
+    try {
+      data = await client.getExtensiveCalls({
+        filter: { callIds },
+        contentSelector: DIGEST_CONTENT_SELECTOR,
+        ...(cursor ? { cursor } : {}),
+      }) as ExtensiveCallsPage;
+    } catch (err) {
+      if (isNoCallsFound(err)) break;
+      throw err;
+    }
+    for (const call of data.calls ?? []) digests.push(digestFromExtensive(call));
+    cursor = data.records?.cursor;
+  } while (cursor);
+  return digests;
 }

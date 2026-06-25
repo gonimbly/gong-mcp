@@ -1,6 +1,10 @@
 # Design: credit-free local equivalents for Gong's AI entity tools
 
-**Status:** Design / follow-up PR. Part 1 (disabling the paid endpoints) shipped separately.
+**Status:** ✅ Implemented as the `gong_entity_context` tool (this PR). Part 1 (disabling the paid
+endpoints) shipped in #20. The design below is what was built; the unified-tool shape, full-window
+behavior, all-four-entity-types coverage, and CONTACT/LEAD participant-email linkage all landed as
+described — see `src/gong/entityContext.ts`, `src/tools/entityContext.ts`, and the
+`findCallsByCrmObject` / `summarizeCalls` additions in `src/gong/discovery.ts`.
 **Author note:** companion to the change that disabled `gong_ask_account` / `gong_ask_deal` /
 `gong_generate_brief` (see README "disabled by default" and `src/utils/featureFlags.ts`).
 
@@ -63,11 +67,12 @@ Replaces the value of `gong_ask_account`, `gong_ask_deal`, **and** `gong_generat
 
 ### CONTACT/LEAD linkage (the one structural difference)
 Calls carry `crmRefs` for **Account and Opportunity only** — not Contact or Lead. So CONTACT/LEAD
-calls are linked by **participant email**: match the person's email against call participants
-(internal and external attendees), which `findCalls({ participant: email })` already does
-(`src/gong/discovery.ts:551`; the participant matcher includes external attendees by email/name).
-If the caller only has a CRM Contact/Lead ID, resolving it to an email is a CRM-side lookup the
-follow-up can add; the v1 accepts the email directly to stay simple and credit-free.
+calls are linked by **exact participant email**: `findCallsByParticipantEmail` matches the person's
+address against call participants (internal and external attendees) using `emailExact` equality —
+*not* the substring/fragment match that the general `findCalls` participant query uses — so one
+contact's context can't fold in a different attendee whose address merely contains the query (e.g.
+`a@acme.com` must not pull in `xa@acme.com`). If the caller only has a CRM Contact/Lead ID,
+resolving it to an email is a CRM-side lookup the follow-up can add; v1 accepts the email directly.
 
 ### Brief shape
 `gong_generate_brief`'s structured multi-category output (themes / stakeholders / risks) is the same
@@ -97,7 +102,7 @@ already ~KB-scale), cap `maxCalls`, and gate transcripts behind `includeTranscri
   gated by `GONG_ENABLE_AI_ENTITIES` (Decision 3: complementary to the paid tools).
 - Core aggregation in `src/gong/entityContext.ts` reusing `findCalls` + `summarizeCall` (no new Gong
   endpoints). Add `aggregateEntityContext(client, { crmEntityType, entityRef, period, maxCalls })`
-  that branches the call-resolution: `crmRefs` match for ACCOUNT/DEAL, `findCalls({ participant })`
+  that branches the call-resolution: `crmRefs` match for ACCOUNT/DEAL, `findCallsByParticipantEmail`
   email match for CONTACT/LEAD.
 - Unit tests with mocked `findCalls`/`summarizeCall` (cover all four types + the email-linkage
   branch); a manual probe under `tests/manual/`.
@@ -106,7 +111,7 @@ already ~KB-scale), cap `maxCalls`, and gate transcripts behind `includeTranscri
 ## Resolved decisions
 
 1. **Cover all four CRM entity types** (ACCOUNT, DEAL, CONTACT, LEAD). CONTACT/LEAD have no `crmRefs`
-   on calls, so they link by **participant email** via `findCalls({ participant })` (v1 takes the
+   on calls, so they link by **exact participant email** via `findCallsByParticipantEmail` (v1 takes the
    email directly; CRM-ID→email resolution is a later add).
 2. **Full window, no `question` param** — return the whole time-window aggregation and let the
    client model filter and answer. Simpler, more transparent, and more general than the paid tool.
