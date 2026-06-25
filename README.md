@@ -48,7 +48,7 @@ OAuth tokens are stored in `~/.gong-mcp/tokens.json` (owner read/write only). Th
 
 ## What's inside
 
-52 tools across 14 modules:
+52 tools across 14 modules — **49 enabled by default** (the 3 AI **Entities** tools are off unless you set `GONG_ENABLE_AI_ENTITIES=true`, since they consume paid Gong credits):
 
 | Module | What you get |
 |---|---|
@@ -72,6 +72,8 @@ OAuth tokens are stored in `~/.gong-mcp/tokens.json` (owner read/write only). Th
 **`gong_find_calls`** — "Calls Nikki was on last month", "calls with Acme" — one tool call. The Gong API has no search endpoint, so this scans `/v2/calls/extensive` server-side, matches participants by user/email/name (external attendees included) and accounts via CRM context, titles, and email domains, then returns compact summaries with a coverage report instead of megabytes of raw JSON (~33× smaller in live measurements).
 
 **`gong_call_summary`** — "What was this call about?" without pulling the transcript: outcome, brief, key points, next steps, topics, trackers, participants in a few KB.
+
+> ⚠️ The next three tools (`gong_ask_account`, `gong_ask_deal`, `gong_generate_brief`) are **disabled by default** — they consume paid Gong credits. See the note below to enable, or use the credit-free alternatives.
 
 **`gong_ask_account`** — Ask Gong's AI a targeted natural-language question about a CRM account. "What are the main objections?" "Which competitors came up?" "What are the open risks?" Gong synthesizes the answer from every related call in the time window.
 
