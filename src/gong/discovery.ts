@@ -774,6 +774,12 @@ export async function summarizeCall(client: GongClient, callId: string): Promise
     }) as ExtensiveCallsPage;
   } catch (err) {
     if (isNoCallsFound(err)) throw notVisible();
+    // A 400 here means the id itself is malformed (e.g. non-numeric, or larger
+    // than Gong's int64) — Gong reports it as an opaque "Json parse error". Surface
+    // an actionable message instead of leaking the raw API error to the model.
+    if (err instanceof GongApiError && err.status === 400) {
+      throw new Error(`Call ${callId} is not a valid Gong call id.`);
+    }
     throw err;
   }
 

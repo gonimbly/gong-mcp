@@ -6,7 +6,7 @@ process.env.GONG_ACCESS_KEY_SECRET = "test-secret";
 process.env.GONG_BASE_URL = "https://gong.test";
 
 const { GongClient } = await import("./client.js");
-const { aggregateEntityContext } = await import("./entityContext.js");
+const { aggregateEntityContext, effectiveMaxCalls } = await import("./entityContext.js");
 const { clearUserDirectoryCache } = await import("./directory.js");
 
 const WS1 = "ws-1";
@@ -141,9 +141,10 @@ describe("aggregateEntityContext — credit-free entity context", () => {
     assert.deepEqual(res.calls.map((c) => c.id), ["c-1"], "only bob@acme.com's call — not xbob@acme.com (c-4)");
   });
 
-  test("maxCalls caps the enriched set to the newest N", async () => {
+  test("maxCalls caps the set and the note honestly flags the partial coverage", async () => {
     const res = await aggregateEntityContext(client, { crmEntityType: "ACCOUNT", entityRef: "001X", maxCalls: 1, ...RANGE });
     assert.deepEqual(res.calls.map((c) => c.id), ["c-1"]);
+    assert.match(res.note ?? "", /1 most recent of 2 calls/, "note must surface that 2 matched but 1 returned");
   });
 
   test("includeTranscripts attaches a speaker-attributed transcript per call", async () => {
@@ -157,5 +158,20 @@ describe("aggregateEntityContext — credit-free entity context", () => {
     const res = await aggregateEntityContext(client, { crmEntityType: "ACCOUNT", entityRef: "001-NOPE", ...RANGE });
     assert.deepEqual(res.calls, []);
     assert.equal(res.coverage.matchedCalls, 0);
+  });
+});
+
+describe("effectiveMaxCalls — transcript payload bound", () => {
+  test("without transcripts: clamps to [1,25], default 10", () => {
+    assert.equal(effectiveMaxCalls(undefined, false), 10);
+    assert.equal(effectiveMaxCalls(25, false), 25);
+    assert.equal(effectiveMaxCalls(100, false), 25);
+    assert.equal(effectiveMaxCalls(0, false), 1);
+  });
+
+  test("with transcripts: additionally capped at 5 to bound the payload", () => {
+    assert.equal(effectiveMaxCalls(25, true), 5, "a big maxCalls is cut to 5 when transcripts are attached");
+    assert.equal(effectiveMaxCalls(undefined, true), 5);
+    assert.equal(effectiveMaxCalls(3, true), 3, "but a smaller request is honored as-is");
   });
 });

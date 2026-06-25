@@ -21,6 +21,8 @@ export function registerEntityContextTools(server: McpServer, client: GongClient
       "call this tool, then answer the user's question from the returned calls yourself.",
       "For ACCOUNT/DEAL pass the Salesforce object id (from the `crmRefs` returned by gong_find_calls / gong_call_summary);",
       "for CONTACT/LEAD pass the person's email address.",
+      "Gong has no server-side CRM filter, so this scans recent calls (up to maxPages×100) and can take 20–40s on busy accounts;",
+      "coverage is recency-bounded — ALWAYS read the returned `note`/`coverage`, which flag when matched calls were capped or older calls were not scanned.",
     ].join(" "),
     {
       crmEntityType: z.enum(["ACCOUNT", "DEAL", "CONTACT", "LEAD"]).describe("Which kind of CRM entity entityRef identifies"),
@@ -30,8 +32,9 @@ export function registerEntityContextTools(server: McpServer, client: GongClient
       ),
       fromDateTime: z.string().optional().describe("ISO 8601 start of the window (default: 30 days ago)"),
       toDateTime: z.string().optional().describe("ISO 8601 end of the window (default: now)"),
-      maxCalls: z.number().int().min(1).max(25).optional().describe("Most-recent calls to enrich into the context (default 10, max 25)"),
-      includeTranscripts: z.boolean().optional().describe("Attach speaker-attributed transcripts for each call (default false; uses more tokens)"),
+      maxCalls: z.number().int().min(1).max(25).optional().describe("Most-recent calls to enrich into the context (default 10, max 25; capped at 5 when includeTranscripts is set)"),
+      includeTranscripts: z.boolean().optional().describe("Attach speaker-attributed transcripts for each call (default false; uses far more tokens, so the call count is capped at 5)"),
+      maxPages: z.number().int().min(1).max(20).optional().describe("Scan page budget, 100 calls each (default 8, max 20). Higher reaches further back on busy accounts but is slower; the coverage note flags when older calls were not scanned"),
       workspaceId: z.string().optional().describe("Restrict the scan to one workspace"),
     },
     async (args) => {
@@ -42,6 +45,7 @@ export function registerEntityContextTools(server: McpServer, client: GongClient
         toDateTime: args.toDateTime,
         maxCalls: args.maxCalls,
         includeTranscripts: args.includeTranscripts,
+        maxPages: args.maxPages,
         workspaceId: args.workspaceId,
       });
       return { content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] };

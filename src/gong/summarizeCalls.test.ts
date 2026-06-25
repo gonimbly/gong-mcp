@@ -6,7 +6,7 @@ process.env.GONG_ACCESS_KEY_SECRET = "test-secret";
 process.env.GONG_BASE_URL = "https://gong.test";
 
 const { GongClient } = await import("./client.js");
-const { summarizeCalls } = await import("./discovery.js");
+const { summarizeCalls, summarizeCall } = await import("./discovery.js");
 
 // Three calls, a deliberately tiny 2-per-page fake → forces a second page so the
 // cursor-follow path is exercised. Guards against silent truncation when a
@@ -26,6 +26,11 @@ globalThis.fetch = (async (input: any, init?: any) => {
   if (url.includes("/v2/calls/extensive")) {
     extensiveRequests++;
     const ids: string[] = body?.filter?.callIds ?? [];
+    // Mirror the live API: a malformed/oversized id makes Gong reject the filter
+    // JSON with a 400 "Json parse error" rather than a clean 404.
+    if (ids.includes("bad-400")) {
+      return json({ errors: ["Json parse error, verify Json format matches the API description."] }, 400);
+    }
     const matched = CALLS.filter((c) => ids.includes(c.metaData.id));
     const offset = body?.cursor ? Number(body.cursor) : 0;
     const exposed = body?.contentSelector?.exposedFields ?? {};
@@ -59,5 +64,14 @@ describe("summarizeCalls — cursor-safe batched enrichment", () => {
     extensiveRequests = 0;
     assert.deepEqual(await summarizeCalls(client, []), []);
     assert.equal(extensiveRequests, 0);
+  });
+});
+
+describe("summarizeCall — malformed id error handling", () => {
+  test("a 400 from a bad id surfaces an actionable message, not the raw Gong error", async () => {
+    await assert.rejects(
+      () => summarizeCall(client, "bad-400"),
+      /not a valid Gong call id/,
+    );
   });
 });

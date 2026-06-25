@@ -38,6 +38,9 @@ export interface EntityContextOptions {
   maxCalls?: number;
   /** Attach speaker-attributed transcripts for each call (more tokens). */
   includeTranscripts?: boolean;
+  /** Scan page budget (100 calls/page) for resolving the entity's calls — higher
+   * reaches further back on busy accounts but is slower. Forwarded to the scanner. */
+  maxPages?: number;
 }
 
 export type EntityContextCall = CallDigest & { transcript?: AttributedTranscript };
@@ -52,9 +55,20 @@ export interface EntityContextResult {
 
 const DEFAULT_MAX_CALLS = 10;
 const MAX_MAX_CALLS = 25;
+// includeTranscripts attaches the full transcript per call (hundreds of KB for
+// ~10 calls — measured live), so cap the call count harder when transcripts are
+// requested to keep the response within a sane token budget.
+const TRANSCRIPT_MAX_CALLS = 5;
 
 function clampMaxCalls(maxCalls?: number): number {
   return Math.min(Math.max(Math.trunc(maxCalls ?? DEFAULT_MAX_CALLS), 1), MAX_MAX_CALLS);
+}
+
+/** Effective cap on enriched calls: the requested/clamped maxCalls, lowered to
+ * TRANSCRIPT_MAX_CALLS when transcripts are attached so the payload stays bounded. */
+export function effectiveMaxCalls(maxCalls: number | undefined, includeTranscripts: boolean): number {
+  const base = clampMaxCalls(maxCalls);
+  return includeTranscripts ? Math.min(base, TRANSCRIPT_MAX_CALLS) : base;
 }
 
 /**
@@ -68,13 +82,14 @@ export async function aggregateEntityContext(
   opts: EntityContextOptions,
 ): Promise<EntityContextResult> {
   const range = { fromDateTime: opts.fromDateTime, toDateTime: opts.toDateTime };
+  const findOpts = { ...range, workspaceId: opts.workspaceId, maxPages: opts.maxPages };
 
   const found: FindCallsResult =
     opts.crmEntityType === "ACCOUNT" || opts.crmEntityType === "DEAL"
-      ? await findCallsByCrmObject(client, { crmObjectId: opts.entityRef, ...range, workspaceId: opts.workspaceId })
-      : await findCallsByParticipantEmail(client, { email: opts.entityRef, ...range, workspaceId: opts.workspaceId });
+      ? await findCallsByCrmObject(client, { crmObjectId: opts.entityRef, ...findOpts })
+      : await findCallsByParticipantEmail(client, { email: opts.entityRef, ...findOpts });
 
-  const ids = found.calls.slice(0, clampMaxCalls(opts.maxCalls)).map((c) => c.id);
+  const ids = found.calls.slice(0, effectiveMaxCalls(opts.maxCalls, Boolean(opts.includeTranscripts))).map((c) => c.id);
 
   const digests = (await summarizeCalls(client, ids))
     .sort((a, b) => (b.started ?? "").localeCompare(a.started ?? ""));
@@ -91,7 +106,17 @@ export async function aggregateEntityContext(
     });
   }
 
-  const note = [found.note, found.policyNote, transcriptNote].filter(Boolean).join(" ") || undefined;
+  // Coverage honesty: when more calls matched than we returned (maxCalls cap, the
+  // transcript cap, or the 50-result scan cap), say so — a partial context block
+  // must never be mistaken for the entity's full call history.
+  const coverageNote =
+    found.coverage.matchedCalls > calls.length
+      ? `Showing the ${calls.length} most recent of ${found.coverage.matchedCalls} calls linked to this entity in the window` +
+        `${opts.includeTranscripts ? " (call count limited because transcripts were requested)" : ""}. ` +
+        `Raise maxCalls (max ${MAX_MAX_CALLS})${opts.includeTranscripts ? ", drop includeTranscripts," : ""} or narrow the date range to see the rest.`
+      : undefined;
+
+  const note = [found.note, found.policyNote, coverageNote, transcriptNote].filter(Boolean).join(" ") || undefined;
 
   return {
     entity: { crmEntityType: opts.crmEntityType, entityRef: opts.entityRef },
