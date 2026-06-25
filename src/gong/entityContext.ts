@@ -16,8 +16,8 @@
  */
 import type { GongClient } from "./client.js";
 import {
-  findCalls,
   findCallsByCrmObject,
+  findCallsByParticipantEmail,
   summarizeCalls,
   type CallDigest,
   type FindCallsResult,
@@ -72,7 +72,7 @@ export async function aggregateEntityContext(
   const found: FindCallsResult =
     opts.crmEntityType === "ACCOUNT" || opts.crmEntityType === "DEAL"
       ? await findCallsByCrmObject(client, { crmObjectId: opts.entityRef, ...range, workspaceId: opts.workspaceId })
-      : await findCalls(client, { participant: opts.entityRef, ...range, workspaceId: opts.workspaceId });
+      : await findCallsByParticipantEmail(client, { email: opts.entityRef, ...range, workspaceId: opts.workspaceId });
 
   const ids = found.calls.slice(0, clampMaxCalls(opts.maxCalls)).map((c) => c.id);
 

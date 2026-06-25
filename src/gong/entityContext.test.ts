@@ -55,6 +55,13 @@ const CALLS = [
     parties: [{ userId: "502", name: "Dave", emailAddress: "dave@gonimbly.com", affiliation: "Internal" }],
     content: CONTENT,
   },
+  {
+    // Near-miss: "xbob@acme.com" CONTAINS "bob@acme.com" — a substring matcher
+    // would wrongly fold this call into a context for bob@acme.com.
+    metaData: { id: "c-4", workspaceId: WS1, title: "A different Bob", started: "2026-06-07T10:00:00Z", duration: 500 },
+    parties: [{ name: "Other Bob", emailAddress: "xbob@acme.com", affiliation: "External" }],
+    content: CONTENT,
+  },
 ];
 
 const PAGE_SIZE = 10; // > any callIds set we request, so the batched enrich is single-page
@@ -129,9 +136,9 @@ describe("aggregateEntityContext — credit-free entity context", () => {
     assert.deepEqual(res.calls.map((c) => c.id), ["c-1"], "only the call linked to the opportunity");
   });
 
-  test("CONTACT: links calls by participant email", async () => {
+  test("CONTACT: links calls by EXACT participant email, never a substring near-miss", async () => {
     const res = await aggregateEntityContext(client, { crmEntityType: "CONTACT", entityRef: "bob@acme.com", ...RANGE });
-    assert.deepEqual(res.calls.map((c) => c.id), ["c-1"], "the call Bob attended");
+    assert.deepEqual(res.calls.map((c) => c.id), ["c-1"], "only bob@acme.com's call — not xbob@acme.com (c-4)");
   });
 
   test("maxCalls caps the enriched set to the newest N", async () => {

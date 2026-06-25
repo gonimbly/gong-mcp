@@ -647,6 +647,27 @@ export async function findCallsByCrmObject(
   });
 }
 
+/**
+ * Find calls in a date range that a specific person attended, matched by EXACT
+ * email — not the fuzzy substring findCalls uses for its participant query. This
+ * keeps one contact's context from folding in a different attendee whose address
+ * merely contains the query (e.g. "a@acme.com" must not pull in "xa@acme.com").
+ * Covers external attendees: unlinked party records carry the email but no userId.
+ * Behind gong_entity_context for CONTACT/LEAD entities.
+ */
+export async function findCallsByParticipantEmail(
+  client: GongClient,
+  opts: { email: string } & Pick<FindCallsOptions, "fromDateTime" | "toDateTime" | "workspaceId" | "maxPages">,
+): Promise<FindCallsResult> {
+  return scanCalls(client, {
+    participant: { userIds: new Set(), emailExact: opts.email.trim().toLowerCase() },
+    ...resolveRange(opts),
+    workspaceId: opts.workspaceId,
+    maxPages: clampMaxPages(opts.maxPages),
+    withCrmContext: false,
+  });
+}
+
 // ── Call summary ──────────────────────────────────────────────────────────────
 
 export interface CallDigest {
@@ -763,21 +784,30 @@ export async function summarizeCall(client: GongClient, callId: string): Promise
   return digestFromExtensive(call);
 }
 
-/** Batched summarizeCall: one /v2/calls/extensive request for many call ids.
- * Returns a digest for each call the session can see — ids that are missing or
- * hidden by policy are simply absent. Order follows the API response, so callers
- * that want newest-first should sort on `started`. */
+/** Batched summarizeCall: digests for many call ids in as few /v2/calls/extensive
+ * requests as possible. Follows the response cursor so a callIds set larger than
+ * one API page (100) is never silently truncated. Returns a digest for each call
+ * the session can see — ids that are missing or hidden by policy are simply
+ * absent. Order follows the API response, so callers that want newest-first
+ * should sort on `started`. */
 export async function summarizeCalls(client: GongClient, callIds: string[]): Promise<CallDigest[]> {
   if (!callIds.length) return [];
-  let data: ExtensiveCallsPage;
-  try {
-    data = await client.getExtensiveCalls({
-      filter: { callIds },
-      contentSelector: DIGEST_CONTENT_SELECTOR,
-    }) as ExtensiveCallsPage;
-  } catch (err) {
-    if (isNoCallsFound(err)) return [];
-    throw err;
-  }
-  return (data.calls ?? []).map(digestFromExtensive);
+  const digests: CallDigest[] = [];
+  let cursor: string | undefined;
+  do {
+    let data: ExtensiveCallsPage;
+    try {
+      data = await client.getExtensiveCalls({
+        filter: { callIds },
+        contentSelector: DIGEST_CONTENT_SELECTOR,
+        ...(cursor ? { cursor } : {}),
+      }) as ExtensiveCallsPage;
+    } catch (err) {
+      if (isNoCallsFound(err)) break;
+      throw err;
+    }
+    for (const call of data.calls ?? []) digests.push(digestFromExtensive(call));
+    cursor = data.records?.cursor;
+  } while (cursor);
+  return digests;
 }
