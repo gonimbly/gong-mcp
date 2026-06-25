@@ -1,3 +1,10 @@
+# [1.2.0](https://github.com/gonimbly/gong-mcp/compare/v1.1.0...v1.2.0) (2026-06-25)
+
+
+### Features
+
+* **entities:** add credit-free gong_entity_context tool ([#21](https://github.com/gonimbly/gong-mcp/issues/21)) ([95509d7](https://github.com/gonimbly/gong-mcp/commit/95509d795b3e300b74a3e8908dc3b76654f9ad13))
+
 # [1.1.0](https://github.com/gonimbly/gong-mcp/compare/v1.0.1...v1.1.0) (2026-06-25)
 
 
