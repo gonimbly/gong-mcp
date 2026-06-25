@@ -108,13 +108,22 @@ export async function aggregateEntityContext(
 
   // Coverage honesty: when more calls matched than we returned (maxCalls cap, the
   // transcript cap, or the 50-result scan cap), say so — a partial context block
-  // must never be mistaken for the entity's full call history.
-  const coverageNote =
-    found.coverage.matchedCalls > calls.length
-      ? `Showing the ${calls.length} most recent of ${found.coverage.matchedCalls} calls linked to this entity in the window` +
-        `${opts.includeTranscripts ? " (call count limited because transcripts were requested)" : ""}. ` +
-        `Raise maxCalls (max ${MAX_MAX_CALLS})${opts.includeTranscripts ? ", drop includeTranscripts," : ""} or narrow the date range to see the rest.`
-      : undefined;
+  // must never be mistaken for the entity's full call history. The remedies are
+  // gated on what would actually help, so the advice isn't misleading.
+  let coverageNote: string | undefined;
+  if (found.coverage.matchedCalls > calls.length) {
+    const transcriptCapBinding =
+      Boolean(opts.includeTranscripts) && clampMaxCalls(opts.maxCalls) > TRANSCRIPT_MAX_CALLS;
+    const moreAlreadyScanned = found.calls.length > calls.length; // raising maxCalls can surface these
+    const remedies: string[] = [];
+    if (transcriptCapBinding) remedies.push("omit includeTranscripts (it caps the count at 5)");
+    if (moreAlreadyScanned && calls.length < MAX_MAX_CALLS) remedies.push(`raise maxCalls (max ${MAX_MAX_CALLS})`);
+    remedies.push("narrow the date range");
+    const advice = remedies.length > 1
+      ? `${remedies.slice(0, -1).join(", ")}, or ${remedies[remedies.length - 1]}`
+      : remedies[0];
+    coverageNote = `Showing the ${calls.length} most recent of ${found.coverage.matchedCalls} calls linked to this entity in the window — ${advice} to see the rest.`;
+  }
 
   const note = [found.note, found.policyNote, coverageNote, transcriptNote].filter(Boolean).join(" ") || undefined;
 
