@@ -57,7 +57,7 @@ OAuth tokens are stored in `~/.gong-mcp/tokens.json` (owner read/write only). Th
 | **Calls** | List, get, transcripts, enriched content (topics, trackers, key points, next steps, outcomes) |
 | **Users** | List, get, settings history, filter by email |
 | **Stats** | Aggregate, by period, day-by-day, scorecard stats, interaction stats |
-| **Entities** | `gong_ask_account`, `gong_ask_deal` — targeted AI Q&A. `gong_generate_brief` — structured multi-category AI summary |
+| **Entities** | `gong_ask_account`, `gong_ask_deal` — targeted AI Q&A. `gong_generate_brief` — structured multi-category AI summary. **Disabled by default** (consume paid Gong credits) — see note below |
 | **Settings** | Scorecards, trackers, workspaces, coaching data |
 | **Library** | Folders and saved clips |
 | **CRM** | Entities, schema, integrations |
@@ -81,7 +81,7 @@ OAuth tokens are stored in `~/.gong-mcp/tokens.json` (owner read/write only). Th
 
 **`gong_get_extensive_calls`** — Single API call that returns calls enriched with topics, trackers, briefs, key points, outcomes, next steps, and speaker stats. The one tool to rule them all.
 
-> **Note:** The three AI tools above (`gong_ask_account`, `gong_ask_deal`, `gong_generate_brief`) require **Gen AI Beta** and **MCP Server Beta** feature flags to be enabled on your Gong org. Contact your Gong Technical Administrator to activate them.
+> **Note — disabled by default:** The three AI tools above (`gong_ask_account`, `gong_ask_deal`, `gong_generate_brief`) call Gong's `/v2/entities/ask-entity` and `/v2/entities/get-brief` endpoints, which **consume paid Gong AI credits**. They are therefore **off by default**: not advertised in the tool list, and any call to them (including from an older client that still has them cached) returns a "tool disabled" message instead of spending a credit. To turn them on, set `GONG_ENABLE_AI_ENTITIES=true` (and ensure your org has the **Gen AI Beta** + **MCP Server Beta** flags enabled — contact your Gong Technical Administrator). For credit-free equivalents, use `gong_call_summary` / `gong_find_calls` (the model answers from the returned call context).
 
 ---
 

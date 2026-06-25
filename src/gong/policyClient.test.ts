@@ -1,4 +1,4 @@
-import { describe, test, beforeEach } from "node:test";
+import { describe, test, beforeEach, before, after } from "node:test";
 import assert from "node:assert/strict";
 
 process.env.GONG_ACCESS_KEY = "test-key";
@@ -222,6 +222,11 @@ describe("stats scoping", () => {
 
 describe("AI synthesis requires unrestricted call access in the workspace", () => {
   const aiParams = { workspaceId: WS1, crmAccountId: "a", crmDealId: "d", timePeriod: "THIS_MONTH", question: "q" };
+
+  // These tests exercise the policy gate for the AI tools, not the credit kill
+  // switch — opt past the GongClient credit guard so granted calls reach the mock.
+  before(() => { process.env.GONG_ENABLE_AI_ENTITIES = "true"; });
+  after(() => { delete process.env.GONG_ENABLE_AI_ENTITIES; });
 
   test("granted for an all-calls profile", async () => {
     await exec.askAccount(aiParams);
