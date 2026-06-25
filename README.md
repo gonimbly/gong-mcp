@@ -48,7 +48,7 @@ OAuth tokens are stored in `~/.gong-mcp/tokens.json` (owner read/write only). Th
 
 ## What's inside
 
-52 tools across 14 modules:
+52 tools across 14 modules — **49 enabled by default** (the 3 AI **Entities** tools are off unless you set `GONG_ENABLE_AI_ENTITIES=true`, since they consume paid Gong credits):
 
 | Module | What you get |
 |---|---|
@@ -57,7 +57,7 @@ OAuth tokens are stored in `~/.gong-mcp/tokens.json` (owner read/write only). Th
 | **Calls** | List, get, transcripts, enriched content (topics, trackers, key points, next steps, outcomes) |
 | **Users** | List, get, settings history, filter by email |
 | **Stats** | Aggregate, by period, day-by-day, scorecard stats, interaction stats |
-| **Entities** | `gong_ask_account`, `gong_ask_deal` — targeted AI Q&A. `gong_generate_brief` — structured multi-category AI summary |
+| **Entities** | `gong_ask_account`, `gong_ask_deal` — targeted AI Q&A. `gong_generate_brief` — structured multi-category AI summary. **Disabled by default** (consume paid Gong credits) — see note below |
 | **Settings** | Scorecards, trackers, workspaces, coaching data |
 | **Library** | Folders and saved clips |
 | **CRM** | Entities, schema, integrations |
@@ -73,6 +73,8 @@ OAuth tokens are stored in `~/.gong-mcp/tokens.json` (owner read/write only). Th
 
 **`gong_call_summary`** — "What was this call about?" without pulling the transcript: outcome, brief, key points, next steps, topics, trackers, participants in a few KB.
 
+> ⚠️ The next three tools (`gong_ask_account`, `gong_ask_deal`, `gong_generate_brief`) are **disabled by default** — they consume paid Gong credits. See the note below to enable, or use the credit-free alternatives.
+
 **`gong_ask_account`** — Ask Gong's AI a targeted natural-language question about a CRM account. "What are the main objections?" "Which competitors came up?" "What are the open risks?" Gong synthesizes the answer from every related call in the time window.
 
 **`gong_ask_deal`** — Same thing, scoped to a deal/opportunity. "What are the blockers preventing this from closing?" "What did the champion say about budget?"
@@ -81,7 +83,7 @@ OAuth tokens are stored in `~/.gong-mcp/tokens.json` (owner read/write only). Th
 
 **`gong_get_extensive_calls`** — Single API call that returns calls enriched with topics, trackers, briefs, key points, outcomes, next steps, and speaker stats. The one tool to rule them all.
 
-> **Note:** The three AI tools above (`gong_ask_account`, `gong_ask_deal`, `gong_generate_brief`) require **Gen AI Beta** and **MCP Server Beta** feature flags to be enabled on your Gong org. Contact your Gong Technical Administrator to activate them.
+> **Note — disabled by default:** The three AI tools above (`gong_ask_account`, `gong_ask_deal`, `gong_generate_brief`) call Gong's `/v2/entities/ask-entity` and `/v2/entities/get-brief` endpoints, which **consume paid Gong AI credits**. They are therefore **off by default**: not advertised in the tool list, and any call to them (including from an older client that still has them cached) returns a "tool disabled" message instead of spending a credit. To turn them on, set `GONG_ENABLE_AI_ENTITIES=true` (and ensure your org has the **Gen AI Beta** + **MCP Server Beta** flags enabled — contact your Gong Technical Administrator). For credit-free equivalents, use `gong_call_summary` / `gong_find_calls` (the model answers from the returned call context).
 
 ---
 

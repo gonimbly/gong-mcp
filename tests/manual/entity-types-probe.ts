@@ -16,6 +16,7 @@
  * Run:  npm run probe:entity-types -- "<Published Brief Name>"
  */
 import { GongClient, GongApiError } from "../../src/gong/client.js";
+import { aiEntitiesEnabled } from "../../src/utils/featureFlags.js";
 
 const briefName = process.argv[2] ?? "__no_such_brief__";
 const DUMMY_ID = "__probe_nonexistent_id__";
@@ -36,6 +37,17 @@ async function report(label: string, fn: () => Promise<unknown>) {
 }
 
 async function main() {
+  // These endpoints consume paid Gong credits and are disabled by default; the
+  // GongClient request guard would throw on every call below. Opt in to probe.
+  if (!aiEntitiesEnabled()) {
+    console.log(
+      "Skipped: Gong AI entity endpoints are disabled (they consume paid credits).\n" +
+      "Re-run with the flag set to probe them, e.g.:\n" +
+      '  GONG_ENABLE_AI_ENTITIES=true npm run probe:entity-types -- "<Published Brief Name>"'
+    );
+    return;
+  }
+
   const client = new GongClient();
   const ws = (await client.listWorkspaces()) as { workspaces?: Array<{ id?: string | number }> };
   const workspaceId = String(ws.workspaces?.[0]?.id ?? "");

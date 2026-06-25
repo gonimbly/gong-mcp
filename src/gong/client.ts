@@ -2,10 +2,18 @@ import { loadTokens, saveTokens, hasLegacyCredentials, type OAuthTokens } from "
 import { refreshAccessToken } from "./oauth.js";
 import { quotaTracker } from "./quota.js";
 import { sendSlackAlert } from "../utils/alert.js";
+import { aiEntitiesEnabled } from "../utils/featureFlags.js";
 
 let consecutiveErrors = 0;
 let consecutiveAlertFired = false;
 const CONSECUTIVE_ERROR_THRESHOLD = 5;
+
+/** Gong endpoints that consume paid AI credits. Routing to either spends real
+ * money on the org's Gong bill, so they are blocked unless GONG_ENABLE_AI_ENTITIES
+ * is explicitly set — see aiEntitiesEnabled(). The block lives here, at the single
+ * request chokepoint, so it holds for ANY caller: a stale skill version that still
+ * has the tools cached, a manual probe, or future code — not just the tool layer. */
+const CREDIT_ENDPOINTS = ["/v2/entities/ask-entity", "/v2/entities/get-brief"];
 
 /** A non-2xx response from the Gong API, carrying the HTTP status for callers
  * that branch on it (e.g. Gong signals "no results" as a 404). */
@@ -71,6 +79,12 @@ export class GongClient {
   }
 
   private async request<T>(path: string, options: RequestInit = {}): Promise<T> {
+    if (!aiEntitiesEnabled() && CREDIT_ENDPOINTS.some((p) => path.startsWith(p))) {
+      throw new Error(
+        "Gong AI entity endpoints (ask-entity / get-brief) are disabled because they " +
+        "consume paid Gong AI credits. Set GONG_ENABLE_AI_ENTITIES=true to re-enable."
+      );
+    }
     if (quotaTracker.isOverLimit()) {
       const { limit } = quotaTracker.getStatus();
       throw new Error(

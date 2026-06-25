@@ -20,6 +20,7 @@
 import { GongClient } from "../../src/gong/client.js";
 import { resolveGongIdentity } from "../../src/gong/identity.js";
 import { statsFilter } from "../../src/tools/stats.js";
+import { aiEntitiesEnabled } from "../../src/utils/featureFlags.js";
 
 const EMAIL = (process.argv[2] ?? "iulyan.ramos@gonimbly.com").toLowerCase();
 const raw = new GongClient();
@@ -115,19 +116,29 @@ await probe("gong_list_trackers", () => raw.listTrackers());
 await probe("gong_list_workspaces", () => raw.listWorkspaces());
 
 // ── AI entity tools (read-only GETs; need Gen AI Beta + a valid CRM id) ───────
+// Disabled by default because they consume paid Gong credits — the GongClient
+// request guard would throw. Probe them only when explicitly opted in.
 
-await probe("gong_ask_account", () => raw.askAccount({
-  workspaceId: ws, crmAccountId: "001QQ00002AExMUYA1", timePeriod: "THIS_MONTH",
-  question: "What was discussed?",
-}));
-await probe("gong_ask_deal (fake deal id — expect semantic error, not a param error)", () => raw.askDeal({
-  workspaceId: ws, crmDealId: "006QQ000009ZZZZYA0", timePeriod: "THIS_MONTH",
-  question: "What are the blockers?",
-}));
-await probe("gong_generate_brief (no published template — expect 'Brief not found')", () => raw.generateBrief({
-  workspaceId: ws, briefName: "Probe", crmEntityType: "ACCOUNT", crmEntityId: "001QQ00002AExMUYA1",
-  timePeriod: "THIS_MONTH",
-}));
+if (aiEntitiesEnabled()) {
+  await probe("gong_ask_account", () => raw.askAccount({
+    workspaceId: ws, crmAccountId: "001QQ00002AExMUYA1", timePeriod: "THIS_MONTH",
+    question: "What was discussed?",
+  }));
+  await probe("gong_ask_deal (fake deal id — expect semantic error, not a param error)", () => raw.askDeal({
+    workspaceId: ws, crmDealId: "006QQ000009ZZZZYA0", timePeriod: "THIS_MONTH",
+    question: "What are the blockers?",
+  }));
+  await probe("gong_generate_brief (no published template — expect 'Brief not found')", () => raw.generateBrief({
+    workspaceId: ws, briefName: "Probe", crmEntityType: "ACCOUNT", crmEntityId: "001QQ00002AExMUYA1",
+    timePeriod: "THIS_MONTH",
+  }));
+} else {
+  rows.push({
+    tool: "gong_ask_account / gong_ask_deal / gong_generate_brief",
+    verdict: "⚠️",
+    detail: "skipped — AI entity endpoints disabled (consume credits); set GONG_ENABLE_AI_ENTITIES=true to probe",
+  });
+}
 
 // ── Library ───────────────────────────────────────────────────────────────────
 
