@@ -1,3 +1,10 @@
+# [1.1.0](https://github.com/gonimbly/gong-mcp/compare/v1.0.1...v1.1.0) (2026-06-25)
+
+
+### Features
+
+* **entities:** disable credit-consuming AI tools by default ([#20](https://github.com/gonimbly/gong-mcp/issues/20)) ([c59f874](https://github.com/gonimbly/gong-mcp/commit/c59f874e677368065810f4c24c1d60595eb9d210))
+
 ## [1.0.1](https://github.com/gonimbly/gong-mcp/compare/v1.0.0...v1.0.1) (2026-06-18)
 
 
