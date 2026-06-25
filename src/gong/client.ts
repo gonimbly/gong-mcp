@@ -82,7 +82,8 @@ export class GongClient {
     if (!aiEntitiesEnabled() && CREDIT_ENDPOINTS.some((p) => path.startsWith(p))) {
       throw new Error(
         "Gong AI entity endpoints (ask-entity / get-brief) are disabled because they " +
-        "consume paid Gong AI credits. Set GONG_ENABLE_AI_ENTITIES=true to re-enable."
+        "consume paid Gong AI credits. Use the credit-free gong_entity_context tool instead, " +
+        "or set GONG_ENABLE_AI_ENTITIES=true to re-enable the paid tools."
       );
     }
     if (quotaTracker.isOverLimit()) {

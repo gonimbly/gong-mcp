@@ -1,6 +1,10 @@
 # Design: credit-free local equivalents for Gong's AI entity tools
 
-**Status:** Design / follow-up PR. Part 1 (disabling the paid endpoints) shipped separately.
+**Status:** ✅ Implemented as the `gong_entity_context` tool (this PR). Part 1 (disabling the paid
+endpoints) shipped in #20. The design below is what was built; the unified-tool shape, full-window
+behavior, all-four-entity-types coverage, and CONTACT/LEAD participant-email linkage all landed as
+described — see `src/gong/entityContext.ts`, `src/tools/entityContext.ts`, and the
+`findCallsByCrmObject` / `summarizeCalls` additions in `src/gong/discovery.ts`.
 **Author note:** companion to the change that disabled `gong_ask_account` / `gong_ask_deal` /
 `gong_generate_brief` (see README "disabled by default" and `src/utils/featureFlags.ts`).
 
